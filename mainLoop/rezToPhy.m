@@ -163,22 +163,23 @@ if ~isempty(savePath)
     fclose(fileIDCP);
     fclose(fileIDA);
 
-     %make params file
-    if ~exist(fullfile(savePath,'params.py'),'file')
-        fid = fopen(fullfile(savePath,'params.py'), 'w');
-        
-        [~, fname, ext] = fileparts(rez.ops.fbinary);
-        
-        fprintf(fid,['dat_path = ''',fname ext '''\n']);
-        fprintf(fid,'n_channels_dat = %i\n',rez.ops.NchanTOT);
-        fprintf(fid,'dtype = ''int16''\n');
-        fprintf(fid,'offset = 0\n');
-        if mod(rez.ops.fs,1)
-            fprintf(fid,'sample_rate = %i\n',rez.ops.fs);
-        else
-            fprintf(fid,'sample_rate = %i.\n',rez.ops.fs);
-        end
-        fprintf(fid,'hp_filtered = False');
-        fclose(fid);
+    % Make params file
+    % include relative path elements in dat_path
+    [dat_path, fname, ext] = fileparts(rez.ops.fbinary);
+    dat_path = split(dat_path, filesep);
+    dat_path = fullfile( dat_path{find(strcmp(dat_path,'..'),1):end}, [fname ext]);
+    
+    fid = fopen(fullfile(savePath, 'params.py'), 'w');
+    fprintf(fid,['dat_path = ''',dat_path '''\n']);
+    fprintf(fid,['dir_path = ''.',filesep,'''\n']);
+    fprintf(fid,'n_channels_dat = %i\n', rez.ops.NchanTOT);
+    fprintf(fid,'dtype = ''int16''\n');
+    fprintf(fid,'offset = 0\n');
+    if mod(rez.ops.fs,1)
+        fprintf(fid,'sample_rate = %i\n', rez.ops.fs);
+    else
+        fprintf(fid,'sample_rate = %i.\n', rez.ops.fs);
     end
+    fprintf(fid,'hp_filtered = False'); %??? whats the basis for this hardcoded declaration??
+    fclose(fid);
 end

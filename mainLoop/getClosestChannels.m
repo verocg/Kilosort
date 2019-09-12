@@ -1,7 +1,7 @@
 function [iC, mask, C2C] = getClosestChannels(rez, sigma, NchanClosest)
 
-
-C2C = (rez.xc(:) - rez.xc(:)').^2 + (rez.yc(:) - rez.yc(:)').^2;
+C2C = squareform(pdist([rez.xc, rez.yc]));
+% C2C = (rez.xc(:) - rez.xc(:)').^2 + (rez.yc(:) - rez.yc(:)').^2;
 Nchan = size(C2C,1);
 
 C2C =  sqrt(C2C);

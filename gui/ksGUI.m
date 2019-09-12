@@ -93,6 +93,7 @@ classdef ksGUI < handle
         function build(obj, f)
             % construct the GUI with appropriate panels
             obj.H.fig = f;
+            obj.H.fsz = 12; % base font size
             set(f, 'UserData', obj);
             
             set(f, 'KeyPressFcn', @(f,k)obj.keyboardFcn(f, k));
@@ -110,7 +111,7 @@ classdef ksGUI < handle
             
             obj.H.logPanel = uiextras.Panel(...
                 'Parent', obj.H.root, ...
-                'Title', 'Message Log', 'FontSize', 18,...
+                'Title', 'Message Log', 'FontSize', 1*obj.H.fsz,...
                 'FontName', 'Myriad Pro');
             
             obj.H.root.Sizes = [-1 -12 -2];
@@ -120,19 +121,19 @@ classdef ksGUI < handle
             obj.H.titleBar = uicontrol(...
                 'Parent', obj.H.titleHBox,...
                 'Style', 'text', 'HorizontalAlignment', 'left', ...
-                'String', 'Kilosort', 'FontSize', 36,...
+                'String', 'Kilosort', 'FontSize', 2*obj.H.fsz,...
                 'FontName', 'Myriad Pro', 'FontWeight', 'bold');
             
             obj.H.helpButton = uicontrol(...
                 'Parent', obj.H.titleHBox,...
                 'Style', 'pushbutton', ...
-                'String', 'Help', 'FontSize', 24,...
+                'String', 'Help', 'FontSize', 1.5*obj.H.fsz,...
                 'Callback', @(~,~)obj.help);
             
             obj.H.resetButton = uicontrol(...
                 'Parent', obj.H.titleHBox,...
                 'Style', 'pushbutton', ...
-                'String', 'Reset GUI', 'FontSize', 24,...
+                'String', 'Reset GUI', 'FontSize', 1.5*obj.H.fsz,...
                 'Callback', @(~,~)obj.reset);
             
             obj.H.titleHBox.Sizes = [-5 -1 -1];
@@ -143,22 +144,22 @@ classdef ksGUI < handle
             
             obj.H.settingsPanel = uiextras.Panel(...
                 'Parent', obj.H.setRunVBox, ...
-                'Title', 'Settings', 'FontSize', 18,...
+                'Title', 'Settings', 'FontSize', 1.2*obj.H.fsz,...
                 'FontName', 'Myriad Pro');
             obj.H.runPanel = uiextras.Panel(...
                 'Parent', obj.H.setRunVBox, ...
-                'Title', 'Run', 'FontSize', 18,...
+                'Title', 'Run', 'FontSize', 1.2*obj.H.fsz,...
                 'FontName', 'Myriad Pro');
-            obj.H.setRunVBox.Sizes = [-4 -1];
+            obj.H.setRunVBox.Sizes = [-3 -1];
             
             obj.H.probePanel = uiextras.Panel(...
                 'Parent', obj.H.mainSection, ...
-                'Title', 'Probe view', 'FontSize', 18,...
+                'Title', 'Probe view', 'FontSize', 1.2*obj.H.fsz,...
                 'FontName', 'Myriad Pro', 'Padding', 5);
             
             obj.H.dataPanel = uiextras.Panel(...
                 'Parent', obj.H.mainSection, ...
-                'Title', 'Data view', 'FontSize', 18,...
+                'Title', 'Data view', 'FontSize', 1.2*obj.H.fsz,...
                 'FontName', 'Myriad Pro', 'Padding', 5);
             
             obj.H.mainSection.Sizes = [-1 -1 -3];
@@ -276,7 +277,7 @@ classdef ksGUI < handle
             obj.H.settings.setFsEdt = uicontrol(...
                 'Parent', obj.H.settingsGrid,...
                 'Style', 'edit', 'HorizontalAlignment', 'left', ...
-                'String', '30000', 'Callback', @(~,~)obj.updateFileSettings());            
+                'String', '40000', 'Callback', @(~,~)obj.updateFileSettings());            
             obj.H.settings.setTrangeEdt = uicontrol(...
                 'Parent', obj.H.settingsGrid,...
                 'Style', 'edit', 'HorizontalAlignment', 'left', ...
@@ -309,13 +310,13 @@ classdef ksGUI < handle
             % button for run
             obj.H.runHBox = uiextras.HBox(...
                 'Parent', obj.H.runVBox,...
-                'Spacing', 10, 'Padding', 5);
+                'Spacing', 5, 'Padding', 5);
             
             obj.H.settings.runBtn = uicontrol(...
                 'Parent', obj.H.runHBox,...
                 'Style', 'pushbutton', 'HorizontalAlignment', 'left', ...
                 'String', 'Run All', 'enable', 'off', ...
-                'FontSize', 20,...
+                'FontSize', 1.4*obj.H.fsz,...
                 'Callback', @(~,~)obj.runAll());
             
             obj.H.settings.runEachVBox = uiextras.VBox(...
@@ -366,7 +367,7 @@ classdef ksGUI < handle
             
             % -- Data view
             obj.H.dataVBox = uiextras.VBox('Parent', ...
-                obj.H.dataPanel, 'Padding', 20);
+                obj.H.dataPanel, 'Padding', 5);
             
             obj.H.dataControlsTxt = uicontrol('Parent', obj.H.dataVBox,...
                 'Style', 'pushbutton', 'HorizontalAlignment', 'left', ...
@@ -383,6 +384,7 @@ classdef ksGUI < handle
             obj.H.dataAx = axes(obj.H.dataVBox);   
             
             set(obj.H.dataAx, 'ButtonDownFcn', @(f,k)obj.dataClickCB(f, k));
+            set(obj.H.dataAx, 'TickLength',[.005, .005])
             hold(obj.H.probeAx, 'on');
             
             set(obj.H.fig, 'WindowScrollWheelFcn', @(src,evt)obj.scrollCB(src,evt))
@@ -390,15 +392,15 @@ classdef ksGUI < handle
             
             obj.H.timeAx = axes(obj.H.dataVBox);
             
-            sq = [0 0; 0 1; 1 1; 1 0];
-            obj.H.timeBckg = fill(obj.H.timeAx, sq(:,1), sq(:,2), [0.3 0.3 0.3]);
+            sq = [0 -1; 0 1; 1 1; 1 -1];
+            obj.H.timeBckg = fill(obj.H.timeAx, sq(:,1), sq(:,2), 0.3*[1 1 1]);
             hold(obj.H.timeAx, 'on');
-            obj.H.timeLine = plot(obj.H.timeAx, [0 0], [0 1], 'r', 'LineWidth', 2.0);
+            obj.H.timeLine = plot(obj.H.timeAx, 0, 0, '.g', 'markersize',8, 'yliminclude','off');
             title(obj.H.timeAx, 'time in recording - click to jump');
             axis(obj.H.timeAx, 'off');
             set(obj.H.timeBckg, 'ButtonDownFcn', @(f,k)obj.timeClickCB(f,k));
             
-            obj.H.dataVBox.Sizes = [30 -6 -1];
+            obj.H.dataVBox.Sizes = [30 -25 -1];
             
             
             
@@ -406,7 +408,7 @@ classdef ksGUI < handle
             obj.H.logBox = uicontrol(...
                 'Parent', obj.H.logPanel,...
                 'Style', 'listbox', 'Enable', 'inactive', 'String', {}, ...
-                'Tag', 'Logging Display', 'FontSize', 14);                        
+                'Tag', 'Logging Display', 'FontSize', .8*obj.H.fsz);                        
         end
         
         function initPars(obj)
@@ -612,12 +614,15 @@ classdef ksGUI < handle
         end
         
         function advancedPopup(obj)
-            
+            % move focus to command window
+            commandwindow;
             % bring up popup window to set other ops
             helpdlg({'To set advanced options, do this in the command window:','',...
                 '>> ks = get(gcf, ''UserData'');',...
-                '>> ks.ops.myOption = myValue;'})
-            
+                sprintf('\t[...I''ll do this for you now]'),...
+                '>> ks.ops.myOption = myValue;'});
+            evalin('base', 'ks = get(1029321, ''UserData'');') % 1029321 is default kilosort gui window figure number
+            evalin('base', 'fprintf(2,''ks.ops =\n''), disp(ks.ops)'); % show current parameters in command window
         end
         
         function runAll(obj)
@@ -686,7 +691,7 @@ classdef ksGUI < handle
 
             obj.ops.fs = str2num(obj.H.settings.setFsEdt.String);
             if isempty(obj.ops.fs)||isnan(obj.ops.fs)
-                obj.ops.fs = 30000;
+                obj.ops.fs = 40000;
             end
                         
             obj.ops.Th = str2num(obj.H.settings.setThEdt.String);
@@ -696,7 +701,7 @@ classdef ksGUI < handle
             obj.H.settings.setThEdt.String = num2str(obj.ops.Th);
             
             obj.ops.lam = str2num(obj.H.settings.setLambdaEdt.String);
-            if isempty(obj.ops.lam)||isnan(obj.ops.lam)
+            if isempty(obj.ops.lam) || isnan(obj.ops.lam)
                 obj.ops.lam = 10;
             end
             obj.H.settings.setLambdaEdt.String = num2str(obj.ops.lam);
@@ -721,7 +726,7 @@ classdef ksGUI < handle
             
             % do preprocessing
             obj.ops.gui = obj; % for kilosort to access, e.g. calling "log"
-            try
+%             try
                 obj.log('Preprocessing...'); 
                 obj.rez = preprocessDataSub(obj.ops);
                 
@@ -746,13 +751,16 @@ classdef ksGUI < handle
                 
                 set(obj.H.settings.runSpikesortBtn, 'enable', 'on');
                 
+                % reset spikesorting run status flag
+                obj.P.ksDone = false;
+                
                 % update gui with results of preprocessing
                 obj.updateDataView();
                 obj.log('Done preprocessing.'); 
-            catch ex
-                obj.log(sprintf('Error preprocessing! %s', ex.message));
-                keyboard
-            end
+%             catch ex
+%                 obj.log(sprintf('Error preprocessing! %s', ex.message));
+%                 keyboard
+%             end
             
         end
         
@@ -776,7 +784,7 @@ classdef ksGUI < handle
         
         function runSpikesort(obj)
             % fit templates
-            try
+%             try
                 % pre-clustering to re-order batches by depth
                 obj.log('Pre-clustering to re-order batches by depth')
                 obj.rez = clusterSingleBatches(obj.rez);
@@ -805,12 +813,12 @@ classdef ksGUI < handle
                                                                 
                 obj.P.ksDone = true;
                 
-                obj.log('Kilosort finished!');
+                obj.log('Kilosort finished!');  fprintf('\tKilosort finished!\n');
                 set(obj.H.settings.runSaveBtn, 'enable', 'on');
                 obj.updateDataView();
-            catch ex
-                obj.log(sprintf('Error running kilosort! %s', ex.message));
-            end   
+%             catch ex
+%                 obj.log(sprintf('Error running kilosort! %s', ex.message));
+%             end   
                         
         end
         
@@ -921,7 +929,7 @@ classdef ksGUI < handle
                                 obj.H.dataTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
-                                    obj.H.dataTr(q) = plot(obj.H.dataAx, 0, NaN, 'k', 'LineWidth', 1.5);
+                                    obj.H.dataTr(q) = plot(obj.H.dataAx, 0, NaN, 'k', 'LineWidth', 0.75);
                                     set(obj.H.dataTr(q), 'HitTest', 'off');
                                 end
                                 box(obj.H.dataAx, 'off');
@@ -953,7 +961,7 @@ classdef ksGUI < handle
                                 obj.H.ppTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
-                                    obj.H.ppTr(q) = plot(obj.H.dataAx, 0, NaN, 'Color', [0 0.6 0], 'LineWidth', 1.5);
+                                    obj.H.ppTr(q) = plot(obj.H.dataAx, 0, NaN, 'Color', [0 0.6 0], 'LineWidth', 0.75);
                                     set(obj.H.ppTr(q), 'HitTest', 'off');
                                 end
                             end
@@ -964,7 +972,7 @@ classdef ksGUI < handle
                             for q = 1:numel(chListW)  
                                 if ~isnan(chListW(q))
                                     set(obj.H.ppTr(q), 'XData', (samps(1):samps(2))/Fs, ...
-                                        'YData', q+datW(q,:).*obj.P.vScale/15);                            
+                                        'YData', q+datW(q,:).*obj.P.vScale/5);                            
                                 end
                             end
                         elseif isfield(obj.H, 'ppTr')
@@ -983,7 +991,7 @@ classdef ksGUI < handle
                                 obj.H.predTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
-                                    obj.H.predTr(q) = plot(obj.H.dataAx, 0, NaN, 'b', 'LineWidth', 1.5);
+                                    obj.H.predTr(q) = plot(obj.H.dataAx, 0, NaN, 'b', 'LineWidth', 0.75);
                                     set(obj.H.predTr(q), 'HitTest', 'off');
                                 end
                             end
@@ -994,7 +1002,7 @@ classdef ksGUI < handle
                             for q = 1:numel(chListW)  
                                 if ~isnan(chListW(q))
                                     set(obj.H.predTr(q), 'XData', (samps(1):samps(2))/Fs, ...
-                                        'YData', q+datP(q,:).*obj.P.vScale/15);                            
+                                        'YData', q+datP(q,:).*obj.P.vScale/5);                            
                                 end
                             end
                         elseif isfield(obj.H, 'predTr')
@@ -1013,7 +1021,7 @@ classdef ksGUI < handle
                                 obj.H.residTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
-                                    obj.H.residTr(q) = plot(obj.H.dataAx, 0, NaN, 'r', 'LineWidth', 1.5);
+                                    obj.H.residTr(q) = plot(obj.H.dataAx, 0, NaN, 'r', 'LineWidth', 0.75);
                                     set(obj.H.residTr(q), 'HitTest', 'off');
                                 end
                             end
@@ -1024,7 +1032,7 @@ classdef ksGUI < handle
                             for q = 1:numel(chListW)  
                                 if ~isnan(chListW(q))
                                     set(obj.H.residTr(q), 'XData', (samps(1):samps(2))/Fs, ...
-                                        'YData', q+datR(q,:).*obj.P.vScale/15);                            
+                                        'YData', q+datR(q,:).*obj.P.vScale/5);                            
                                 end
                             end
                         elseif isfield(obj.H, 'residTr')
@@ -1411,7 +1419,7 @@ classdef ksGUI < handle
                 maxT = nSamp/obj.ops.fs;
                 
                 obj.P.currT = keydata.IntersectionPoint(1)*maxT;
-                set(obj.H.timeLine, 'XData', keydata.IntersectionPoint(1)*[1 1]);
+                set(obj.H.timeLine, 'XData', keydata.IntersectionPoint(1)*[1]);
                 
                 obj.updateDataView;
             end
@@ -1458,6 +1466,7 @@ classdef ksGUI < handle
                         obj.P.showResidual = false;
                     else
                         obj.P.showPrediction = ~obj.P.showPrediction;
+                        
                     end
                 case '4'
                     if obj.P.colormapMode

@@ -27,7 +27,9 @@ Nnearest    = min(ops.Nchan, 32);
 sigmaMask  = ops.sigmaMask;
 
 
-ops.spkTh = -6; % why am I overwriting this here?
+% ops.spkTh = -6; % why am I overwriting this here?
+% I dont know...maybe just don't  --TBC
+
 
 nt0 = ops.nt0;
 nt0min  = rez.ops.nt0min; 
@@ -43,18 +45,38 @@ Nchan 	= ops.Nchan;
 [iC, mask, C2C] = getClosestChannels(rez, sigmaMask, NchanNear);
 
 isortbatches = rez.iorig(:);
-nhalf = ceil(nBatches/2);
+nhalf = floor(nBatches/2);   % nhalf = ceil(nBatches/2);
 
-ischedule = [nhalf:nBatches nBatches:-1:nhalf];
-i1 = [(nhalf-1):-1:1];
-i2 = [nhalf:nBatches];
 
-irounds = cat(2, ischedule, i1, i2);
+% Setup double pass sequence through batches of time
+% (**NOTE relative times in this sweep are in resorted 'time'**)
+% 1st Pass:  [midpoint-to-end, midpoint-to-start]
+% 2nd Pass:  [midpoint-to-start, midpoint-to-end]
+% % % pass1 = [(nhalf+1):nBatches, nBatches:-1:1];
+pass1 = [1:1:nBatches, (nBatches-1):-1:nhalf+1];%[(nhalf+1):nBatches, nBatches:-1:1];
+% --NOTE: this  
+
+% sweep in opposite directions for second pass
+% % % pass2 = [1:1:nBatches];%]circshift(pass1, nhalf+1);
+pass2 = [nhalf:-1:1, nhalf+1:1:nBatches];% [1:1:nBatches];
+irounds = [pass1, pass2];
+passId = [ones(size(pass1)), 2*ones(size(pass2))];
+
+% % git orig code
+% ischedule = [nhalf:nBatches nBatches:-1:nhalf];
+% i1 = [(nhalf-1):-1:1];
+% i2 = [nhalf:nBatches];
+% irounds = cat(2, ischedule, i1, i2);
 
 niter   = numel(irounds);
-if irounds(niter - nBatches)~=nhalf
-    error('mismatch between number of batches');
-end
+
+% replace "niter-nBatches" with direct count of 1st pass instances
+nPass1batches = sum(passId==1);
+
+% % % if irounds(niter - nBatches)~=nhalf
+% % %     error('mismatch between number of batches');
+% % % end
+
 %
 flag_final = 0;
 flag_resort      = 1;
@@ -64,7 +86,7 @@ t0 = ceil(rez.ops.trange(1) * ops.fs);
 nInnerIter  = 60;
 
 
-pmi = exp(-1./linspace(ops.momentum(1), ops.momentum(2), niter-nBatches));
+pmi = exp(-1./linspace(ops.momentum(1), ops.momentum(2), nPass1batches));
 
 Nsum = 7; % how many channels to extend out the waveform in mexgetspikes
 Params     = double([NT Nfilt ops.Th(1) nInnerIter nt0 Nnearest ...
@@ -91,18 +113,33 @@ ndrop = zeros(1,2);
 
 m0 = ops.minFR * ops.NT/ops.fs;
 
+% 1st pass == ibatch<nPass1batches
+% 2nd pass == ibatch>nPass1batches
+
 for ibatch = 1:niter
+    if size(nsp,2)>1
+        nsp = nsp(:);
+        fprintf(2, '!');    %  keyboard
+    end
     
     %     k = irounds(ibatch);
     korder = irounds(ibatch);
     k = isortbatches(korder);
-
-    if ibatch>niter-nBatches && korder==nhalf
+    % which pass are we on?
+    passNo = passId(ibatch);
+    
+    % 2nd pass == ibatch>nPass1batches
+    %    Drift from midpoint to tEnd, jump back to midpoint (here), then
+    %    works from midpoint to t0
+    
+    if passNo>1 && korder==nhalf+1 %(korder==nhalf || korder==nhalf+1)    %ibatch>nPass1batches && korder==nhalf
         [W, dWU] = revertW(rez);
-        fprintf('reverted back to middle timepoint \n')
+        fprintf('reverted back to middle timepoint [%d, %d]\n', ibatch, korder)
+%         keyboard
     end
 
-    if ibatch<=niter-nBatches
+    % 1st pass:  Apply variable annealing strength (average of last n-spikes)
+    if passNo==1    %ibatch<=nPass1batches
         Params(9) = pmi(ibatch);
         pm = pmi(ibatch) * gpuArray.ones(Nfilt, 1, 'double');
     end
@@ -114,7 +151,7 @@ for ibatch = 1:niter
     dat = fread(fid, [NT ops.Nchan], '*int16');
     dataRAW = single(gpuArray(dat))/ ops.scaleproc;
 
-    
+    % Initial pass only
     if ibatch==1            
         [dWU, cmap] = mexGetSpikes2(Params, dataRAW, wTEMP, iC-1);        
 %         dWU = mexGetSpikes(Params, dataRAW, wPCA);
@@ -151,12 +188,14 @@ for ibatch = 1:niter
    
     fexp = exp(double(nsp0).*log(pm(1:Nfilt)));
     fexp = reshape(fexp, 1,1,[]);
-    nsp = nsp * p1 + (1-p1) * double(nsp0);
+    nsp = nsp(:) * p1 + (1-p1) * double(nsp0);
     dWU = dWU .* fexp + (1-fexp) .* (dWU0./reshape(max(1, double(nsp0)), 1,1, []));
     
     % \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     
-    if ibatch==niter-nBatches
+    % last batch of this pass: Lock in settings
+    %  & adjust flags for next pass
+    if passNo~=passId(min(ibatch+1,end)) % ibatch==nPass1batches
         flag_resort   = 0;
         flag_final = 1;
         
@@ -179,10 +218,13 @@ for ibatch = 1:niter
         Params(3) = ops.Th(end);
 
         rez = memorizeW(rez, W, dWU, U, mu);
-        fprintf('memorized middle timepoint \n')
-    end
+        fprintf('memorized middle timepoint [%d, %d]\n', ibatch, korder)
 
-    if ibatch<niter-nBatches %-50
+    %end 
+    
+    elseif passNo==1 %ibatch<nPass1batches %-50
+        
+        % 1st pass stuff
         if rem(ibatch, 5)==1
             % this drops templates
             [W, U, dWU, mu, nsp, ndrop] = ...
@@ -214,9 +256,11 @@ for ibatch = 1:niter
             mu  = mu(1:Nfilt);            
         end
 
-    end
+    %end
 
-    if ibatch>niter-nBatches        
+    elseif passNo==2 %ibatch>nPass1batches        
+        
+        % 2nd pass stuff
         rez.WA(:,:,:,k) = gather(W);
         rez.UA(:,:,:,k) = gather(U);
         rez.muA(:,k) = gather(mu);
@@ -248,8 +292,14 @@ for ibatch = 1:niter
 
         ntot = ntot + numel(x0);
     end
+    
+% %     if ibatch>1 && passNo==1 &&  korder==nhalf+1
+% %         rez = memorizeW(rez, W, dWU, U, mu);
+% %         fprintf('memorized middle timepoint [%d, %d]\n', ibatch, korder)
+% %     end
 
-    if ibatch==niter-nBatches        
+    % clean up for next pass type
+    if passNo~=passId(min(ibatch+1,end))  %ibatch==nPass1batches        
         st3 = zeros(1e7, 5);
         rez.WA = zeros(nt0, Nfilt, Nrank,nBatches,  'single');
         rez.UA = zeros(Nchan, Nfilt, Nrank,nBatches,  'single');
@@ -260,7 +310,7 @@ for ibatch = 1:niter
     end
 
     if rem(ibatch, 100)==1
-        fprintf('%2.2f sec, %d / %d batches, %d units, nspks: %2.4f, mu: %2.4f, nst0: %d, merges: %2.4f, %2.4f \n', ...
+        fprintf('%2.2f sec, %d / %d batches, %d units, nspks: %2.4f, mu: %2.4f, nst0: %d, merges: %2.4f, %2.4f\n', ...
             toc, ibatch, niter, Nfilt, sum(nsp), median(mu), numel(st0), ndrop)
 
 %         keyboard;
@@ -277,12 +327,14 @@ for ibatch = 1:niter
            title('Temporal Components')
            xlabel('Unit number'); 
            ylabel('Time (samples)'); 
+           box off;
 
            subplot(2,2,2)
            imagesc(U(:,:,1))
            title('Spatial Components')
            xlabel('Unit number'); 
            ylabel('Channel number'); 
+           box off;
 
            subplot(2,2,3)
            plot(mu)
@@ -290,6 +342,7 @@ for ibatch = 1:niter
            title('Unit Amplitudes')
            xlabel('Unit number'); 
            ylabel('Amplitude (arb. units)');
+           box off;
 
            subplot(2,2,4)
            semilogx(1+nsp, mu, '.')
@@ -298,6 +351,7 @@ for ibatch = 1:niter
            title('Amplitude vs. Spike Count')
            xlabel('Spike Count'); 
            ylabel('Amplitude (arb. units)');        
+           box off;
            drawnow
         end
     end

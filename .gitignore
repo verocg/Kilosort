@@ -13,7 +13,10 @@ $RECYCLE.BIN/
 # Compiled source 
 *.mexa64
 *.mexw64
+
+# Matlab temp files
 *.asv
+*.m~
 
 # Windows shortcuts
 *.lnk

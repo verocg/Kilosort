@@ -102,7 +102,7 @@ for ibatch = 1:nBatches
 end
 
 
-tic
+t0 = tic;
 ns = reshape(ns, Nfilt, []);
 
 Params  = [1 NrankPC Nfilt 0 size(W,1) 0 NchanNear Nchan];
@@ -141,8 +141,15 @@ for ibatch = 1:nBatches
     ccb(ibatch,:) = cct;
     d1(ibatch,:) = imin;
     
-    if rem(ibatch, 500)==1
-        fprintf('time %2.2f, compared %d / %d batches \n', toc, ibatch, nBatches)
+    if rem(ibatch, 100)==1
+        % progress update
+        msgUpdateLen = 100;
+        secPerBatch = toc(t0)/ibatch;
+        tRemEstimate = secPerBatch * (nBatches-ibatch)/60;
+        fprintf(repmat('\b',1,msgUpdateLen)); % clear previous message
+        msgUpdateStr = sprintf('\ncompared %d / %d batches.  (%2.2f min elapsed, ~%2.2f min remain; %2.2f s/batch)', ibatch, nBatches, toc(t0)/60, tRemEstimate, secPerBatch);
+        fprintf(pad(msgUpdateStr,msgUpdateLen,'.')); % write new message
+%         fprintf('time %2.2f, compared %d / %d batches.\t(est. %2.2f min remaining) \n', toc, ibatch, nBatches, toc/60/ibatch*(nBatches-ibatch))
     end
 end
 
@@ -155,17 +162,35 @@ rez.ccb = gather(ccb0);
 [ccb1, iorig] = sortBatches2(ccb0);
 
 figure;
-subplot(1,2,1)
+subplot(1,3,1)
 imagesc(ccb0, [-5 5]); drawnow
 xlabel('batches')
 ylabel('batches')
 title('batch to batch distance')
+axis square, box off
 
-subplot(1,2,2)
+subplot(1,3,2)
 imagesc(ccb1, [-5 5]); drawnow
 xlabel('sorted batches')
 ylabel('sorted batches')
 title('AFTER sorting')
+axis square, box off
+
+subplot(1,3,3)
+b0 = meshgrid(1:length(iorig));
+idiff = (1:length(iorig))'-iorig;
+for i = 1:length(b0)
+    b0(i,:) = circshift(b0(i,:), idiff(i));
+end     %b0 = circshift(b0, idiff);
+imagesc(b0); drawnow
+xlabel('batch time')
+ylabel('batch')
+title('batch to batch shifts')
+colormap(gca, 'jet');
+axis square, box off
+
+cb = colorbar;
+set(cb, 'Direction','reverse', 'Ticks',[1,floor(max(ylim))],'TickLabels',{'t0','tEnd'})
 
 rez.iorig = gather(iorig);
 rez.ccbsort = gather(ccb1);

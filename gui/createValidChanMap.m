@@ -29,7 +29,7 @@ if isfield(q, 'chanMap') && ...
     else
         cm.connected = true(size(cm.chanMap));
     end
-    
+        
     cm.kcoords = ones(size(cm.chanMap));
     if isfield(q, 'kcoords') 
         if numel(q.kcoords)==numel(cm.chanMap)
@@ -38,8 +38,9 @@ if isfield(q, 'chanMap') && ...
             warning('Invalid chanMap variable ''kcoords'': must be the same size as chanMap. Using default.');
         end
     elseif isfield(q, 'shankInd')
-        if numel(q.shankInd)==numel(cm.chanMap)           
-            cm.kcoords = q.shankInd(:);        
+        if numel(q.shankInd)==numel(cm.chanMap)
+            cm.kcoords = q.shankInd(:); % standardize fields
+            q = rmfield(q, 'shankInd');
         else
             warning('Invalid chanMap variable ''shankInd'': must be the same size as chanMap. Using default.');
         end            
@@ -65,6 +66,12 @@ if isfield(q, 'chanMap') && ...
         cm.siteSize = siteSize;
     end
     
+    % Don't discard additional chanMap fields
+    fn = fieldnames(q);
+    for f = find(~ismember(fn, fieldnames(cm)))'
+        cm.(fn{f}) = q.(fn{f});
+    end
+
 else
     warning('Invalid channel map: A valid channel map must have chanMap, xcoords, and ycoords, and they must all be the same size.')
 end

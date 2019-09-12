@@ -1,5 +1,5 @@
 function [rez, DATA] = preprocessDataSub(ops)
-tic;
+t0 = tic;
 ops.nt0 	= getOr(ops, {'nt0'}, 61);
 ops.nt0min  = getOr(ops, 'nt0min', ceil(20 * ops.nt0/61));
 
@@ -22,7 +22,7 @@ ops.NchanTOT = getOr(ops, 'NchanTOT', NchanTOTdefault);
 if getOr(ops, 'minfr_goodchannels', .1)>0
     
     % determine bad channels
-    fprintf('Time %3.0fs. Determining good channels.. \n', toc);
+    fprintf('Time %3.0fs. Determining good channels.. \n', toc(t0));
 
     igood = get_good_channels(ops, chanMap);
     xc = xc(igood);
@@ -59,13 +59,13 @@ rez.ops.NTbuff = NTbuff;
 rez.ops.chanMap = chanMap;
 
 
-fprintf('Time %3.0fs. Computing whitening matrix.. \n', toc);
+fprintf('Time %3.0fs. Computing whitening matrix.. \n', toc(t0));
 
 % this requires removing bad channels first
 Wrot = get_whitening_matrix(rez);
 
 
-fprintf('Time %3.0fs. Loading raw data and applying filters... \n', toc);
+fprintf('Time %3.0fs. Loading raw data and applying filters... \n', toc(t0));
 
 fid         = fopen(ops.fbinary, 'r');
 if ~ops.useRAM
@@ -74,6 +74,7 @@ if ~ops.useRAM
 else
     DATA = zeros(NT, rez.ops.Nchan, Nbatch, 'int16');    
 end
+
 % load data into patches, filter, compute covariance
 if isfield(ops,'fslow')&&ops.fslow<ops.fs/2
     [b1, a1] = butter(3, [ops.fshigh/ops.fs,ops.fslow/ops.fs]*2, 'bandpass');
@@ -81,6 +82,21 @@ else
     [b1, a1] = butter(3, ops.fshigh/ops.fs*2, 'high');
 end
 
+% flag to apply common median referencing across channels
+doCMR = getOr(ops, 'CMR');
+if isempty(doCMR)
+    % Originally 'CAR', but is actually applying CMR;
+    % begin to right wrongs by accepting either flag here
+    doCMR = getOr(ops, 'CAR', 1);
+end
+if doCMR
+    fprintf('\t-- CMR referencing will be applied across channels\n')
+else
+    fprintf('\t-- NO referencing will be applied across channels\n' )
+end
+
+
+tLoading = tic;
 for ibatch = 1:Nbatch
     offset = max(0, ops.twind + 2*NchanTOT*((NT - ops.ntbuff) * (ibatch-1) - 2*ops.ntbuff));
     if offset==0
@@ -108,18 +124,20 @@ for ibatch = 1:Nbatch
     dataRAW = single(dataRAW);
     dataRAW = dataRAW(:, chanMap);
     
-    % subtract the mean from each channel
+    % subtract the mean from within each channel
     dataRAW = dataRAW - mean(dataRAW, 1);    
+    
+    % Apply common median referencing across channels
+    % !! should be done *before* filtering
+    if doCMR
+        dataRAW = dataRAW - median(dataRAW, 2);
+    end
     
     datr = filter(b1, a1, dataRAW);
     datr = flipud(datr);
     datr = filter(b1, a1, datr);
     datr = flipud(datr);
     
-    % CAR, common average referencing by median
-    if getOr(ops, 'CAR', 1)
-        datr = datr - median(datr, 2);
-    end
     
     datr = datr(ioffset + (1:NT),:);
     
@@ -131,6 +149,28 @@ for ibatch = 1:Nbatch
         datcpu  = gather_try(int16(datr));
         fwrite(fidW, datcpu, 'int16');
     end
+    
+    
+    % progress update
+    msgUpdateLen = 80;
+    msgUpdateFreq = 20;
+    % Unified progress utility function
+    %   updateProgressMessage(n, ntot, tbase, len, freq)
+    updateProgressMessage(ibatch, Nbatch, tLoading, msgUpdateLen, msgUpdateFreq);
+%     if mod(ibatch, msgUpdateFreq)==1
+%         % update times
+%         secPerBatch = toc(tLoading)/ibatch;
+%         tRemEstimate = secPerBatch * (Nbatch-ibatch)/60;
+%         % clear previous message
+%         if ibatch>1
+%             fprintf(repmat('\b',1,msgUpdateLen + msgUpdateFreq-1));
+%         end
+%         % update message
+%         msg = sprintf('\nfinished batch %i of %i.  (%2.2f min elapsed, ~%2.2f min remaining)',ibatch, Nbatch, toc(tLoading)/60, tRemEstimate);
+%         fprintf(pad(msg, msgUpdateLen, '.'));
+%     else
+%         fprintf('.')
+%     end
 end
 
 Wrot        = gather_try(Wrot);
@@ -139,7 +179,7 @@ rez.Wrot    = Wrot;
 fclose(fidW);
 fclose(fid);
 
-fprintf('Time %3.0fs. Finished preprocessing %d batches. \n', toc, Nbatch);
+fprintf('\nTime %3.0fs. Finished preprocessing %d batches. \n', toc(t0), Nbatch);
 
 rez.temp.Nbatch = Nbatch;
 
