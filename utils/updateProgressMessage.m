@@ -18,7 +18,7 @@ end
 
 %% Make string
 
-if mod(n, ntot)==1
+if mod(n, freq)==1
     % update times
     secPerN = t/n;
     tRemEstimate = secPerN * (ntot-n)/60;
