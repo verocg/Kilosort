@@ -45,3 +45,8 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Don't push local chanMaps to repo
+configFiles/*_kilosortChanMap.mat
+
+
