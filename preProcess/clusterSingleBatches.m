@@ -96,11 +96,14 @@ for ibatch = 1:nBatches
     end    
     i0 = i0 + Nfilt;    
     
-    if rem(ibatch, 500)==1
-        fprintf('time %2.2f, pre clustered %d / %d batches \n', toc, ibatch, nBatches)
+    if rem(ibatch, 200)==1
+        updateProgressMessage(ibatch, nBatches);
+        %         fprintf('time %2.2f, pre clustered %d / %d batches \n', toc, ibatch, nBatches)
     end
 end
 
+
+fprintf('time %s)\tPre-clustered %d batches, avg. %2.2f units/batch\n', datestr(now,'HH:MM PM'), nBatches, i0/nBatches)
 
 t0 = tic;
 ns = reshape(ns, Nfilt, []);
@@ -143,12 +146,7 @@ for ibatch = 1:nBatches
     
     if rem(ibatch, 100)==1
         % progress update
-        msgUpdateLen = 100;
-        secPerBatch = toc(t0)/ibatch;
-        tRemEstimate = secPerBatch * (nBatches-ibatch)/60;
-        fprintf(repmat('\b',1,msgUpdateLen)); % clear previous message
-        msgUpdateStr = sprintf('\ncompared %d / %d batches.  (%2.2f min elapsed, ~%2.2f min remain; %2.2f s/batch)', ibatch, nBatches, toc(t0)/60, tRemEstimate, secPerBatch);
-        fprintf(pad(msgUpdateStr,msgUpdateLen,'.')); % write new message
+        updateProgressMessage(ibatch, nBatches);
 %         fprintf('time %2.2f, compared %d / %d batches.\t(est. %2.2f min remaining) \n', toc, ibatch, nBatches, toc/60/ibatch*(nBatches-ibatch))
     end
 end
@@ -195,6 +193,6 @@ set(cb, 'Direction','reverse', 'Ticks',[1,floor(max(ylim))],'TickLabels',{'t0','
 rez.iorig = gather(iorig);
 rez.ccbsort = gather(ccb1);
 
-fprintf('time %2.2f, Re-ordered %d batches. \n', toc, nBatches)
+fprintf('\ntime %s)\tRe-ordered %d batches. \n', datestr(now,'HH:MM PM'), nBatches)
 %% 
 

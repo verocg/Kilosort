@@ -27,8 +27,8 @@ if mod(n, freq)==1
         fprintf(repmat('\b',1,len + freq-1));
     end
     % update message
-    msg = sprintf('\nfinished %i of %i.  (%2.2f min elapsed, ~%2.2f min remaining)',n, ntot, t/60, tRemEstimate);
-    fprintf(pad(msg, len, '.'));
+    msg = sprintf('\nfinished %i of %i.  (%2.2f min elapsed, ~%2.2f min remaining; %2.2f s/ea)',n, ntot, t/60, tRemEstimate, secPerN);
+    fprintf(pad(msg, len, '-'));
 else
     fprintf('.')
 end

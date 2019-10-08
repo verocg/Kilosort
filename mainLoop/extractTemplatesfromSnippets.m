@@ -43,9 +43,11 @@ for ibatch = 1:nskip:Nbatch
     
     dd(:, k + [1:size(c,2)]) = c;    
     k = k + size(c,2);
-    if k>1e5
-        break;
-    end
+    
+    % No, sample from all batches
+    %     if k>1e5
+    %         break;
+    %     end
 end
 fclose(fid);
 

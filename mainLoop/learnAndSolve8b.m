@@ -106,6 +106,8 @@ p1 = .95; % decay of nsp estimate
 
 fprintf('Time %3.0fs. Optimizing templates ...\n', toc)
 
+T0 = tic;
+
 fid = fopen(ops.fproc, 'r');
 
 ntot = 0;
@@ -202,7 +204,8 @@ for ibatch = 1:niter
         % final clean up
         [W, U, dWU, mu, nsp, ndrop] = ...
             triageTemplates2(ops, iW, C2C, W, U, dWU, mu, nsp, ndrop);
-
+        fprintf('Params = \n\t%s\n',sprintf('%04.3f\t',Params))
+        
         Nfilt = size(W,2);
         Params(2) = Nfilt;
 
@@ -219,11 +222,18 @@ for ibatch = 1:niter
 
         rez = memorizeW(rez, W, dWU, U, mu);
         fprintf('memorized middle timepoint [%d, %d]\n', ibatch, korder)
+        fprintf('Params = \n\t%s\n',sprintf('%04.3f\t',Params))
 
     %end 
     
     elseif passNo==1 %ibatch<nPass1batches %-50
-        
+
+        %         if ibatch==nhalf
+        %             fprintf('Params = \n\t%s\n',sprintf('%04.3f\t',Params))
+        %             Params([3]) = ops.Th(end);
+        %             fprintf('Params = \n\t%s\n',sprintf('%04.3f\t',Params))
+        %         end
+
         % 1st pass stuff
         if rem(ibatch, 5)==1
             % this drops templates
@@ -260,6 +270,12 @@ for ibatch = 1:niter
 
     elseif passNo==2 %ibatch>nPass1batches        
         
+        %         if korder==nhalf+5
+        %             fprintf('Params = \n\t%s\n',sprintf('%04.3f\t',Params))
+        %             Params([3,16]) = ops.Th(end);
+        %             fprintf('Params = \n\t%s\n',sprintf('%04.3f\t',Params))
+        %         end
+
         % 2nd pass stuff
         rez.WA(:,:,:,k) = gather(W);
         rez.UA(:,:,:,k) = gather(U);
@@ -309,11 +325,13 @@ for ibatch = 1:niter
         fWpc = zeros(NchanNear, Nrank, 1e7, 'single');
     end
 
-    if rem(ibatch, 100)==1
-        fprintf('%2.2f sec, %d / %d batches, %d units, nspks: %2.4f, mu: %2.4f, nst0: %d, merges: %2.4f, %2.4f\n', ...
-            toc, ibatch, niter, Nfilt, sum(nsp), median(mu), numel(st0), ndrop)
-
-%         keyboard;
+    doRefresh = (ibatch<10) || (ibatch<20 && rem(ibatch, 10)==1) || (ibatch<500 && rem(ibatch, 20)==1) || (rem(ibatch, 100)==1);
+    if doRefresh    %rem(ibatch, 100)==1
+        tstring = datestr(toc(T0)/86400,'HH:MM:SS'); % sec to days to string
+        fprintf('  %s, %d / %d batches, %d units, nspks: %2.4f, mu: %2.4f, nst0: %d, merges: %2.4f, %2.4f\n', ...
+            tstring, ibatch, niter, Nfilt, sum(nsp), median(mu), numel(st0), ndrop)
+        
+        %         keyboard;
         
         if ibatch==1
             figHand = figure;
@@ -359,14 +377,12 @@ end
 
 fclose(fid);
 
-toc
-
 
 st3 = st3(1:ntot, :);
 fW = fW(:, 1:ntot);
 fWpc = fWpc(:,:, 1:ntot);
 
-ntot
+% ntot
 
 % [~, isort] = sort(st3(:,1), 'ascend');
 % fW = fW(:, isort);
@@ -412,7 +428,7 @@ for j = 1:Nfilt
     rez.U_b(:,:,j) = gather(C(:, 1:nKeep));
 end
 
-fprintf('Finished compressing time-varying templates \n')
+fprintf('Time %3.0fs. Finished compressing time-varying templates \n',toc)
 %%
 
 

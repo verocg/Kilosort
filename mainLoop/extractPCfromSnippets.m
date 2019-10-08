@@ -9,11 +9,13 @@ Nbatch      = rez.temp.Nbatch;
 NT  	= ops.NT;
 batchstart = 0:NT:NT*Nbatch;
 
+nskip = getOr(ops, 'nskip', 100);
+
 % extract the PCA projections
 CC = zeros(ops.nt0);
 fid = fopen(ops.fproc, 'r');
 
-for ibatch = 1:100:Nbatch
+for ibatch = 1:nskip:Nbatch
     offset = 2 * ops.Nchan*batchstart(ibatch);
     fseek(fid, offset, 'bof');
     dat = fread(fid, [NT ops.Nchan], '*int16');
