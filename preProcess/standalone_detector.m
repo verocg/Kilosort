@@ -37,6 +37,7 @@ xcup = xcup(igood);
 
 % number of nearby templates to compare for local template maximum
 NchanNearUp =  10*NchanNear;
+NchanNearUp = min([numel(ycup), numel(xcup), NchanNearUp]);
 [iC2, dist2] = getClosestChannels2(ycup, xcup, ycup, xcup, NchanNearUp);
 
 % pregenerate the Gaussian weights used for spatial components 

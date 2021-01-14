@@ -175,7 +175,26 @@ if ~isempty(savePath)
     KSLabelFilename = fullfile(savePath, 'cluster_KSLabel.tsv');
     copyfile(KSLabelFilename, fullfile(savePath, 'cluster_group.tsv'));
 
-     %make params file
+    % if raw/binary data file location is not same as save destination,
+    % attempt to create symlink to raw file
+    if ~strcmpi( fileparts(rez.ops.fbinary), rez.ops.saveDir)
+        fprintf(2, ['\n\tWARNING: raw data directory and save output data directory are distinct locations.'...
+            '\n\tAttempt to create symlink to raw data in save output directory...']);
+        try
+            [~, fname, ext] = fileparts(rez.ops.fbinary);
+            [err, msg] = system( sprintf('ln -sv %s %s', rez.ops.fbinary, fullfile(rez.ops.saveDir, [fname ext]) ));
+            if ~err
+                fprintf('successful!\n\t%s\n',msg)
+            else
+                % Note: symlinks won't work on certain file systems (needs extended attributes; not Fat32)
+                fprintf(2, 'failed.\t%s',msg)
+                fprintf(['\n\t%s','\n\t>>','\n\t%s'...
+                    '\n\tA copy of raw data may need to be manually added to the output directory before starting Phy\n'], rez.ops.fbinary,rez.ops.saveDir);
+            end
+        end
+    end
+    
+    %make params file
     if ~exist(fullfile(savePath,'params.py'),'file')
         fid = fopen(fullfile(savePath,'params.py'), 'w');
 
