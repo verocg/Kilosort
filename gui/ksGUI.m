@@ -661,7 +661,10 @@ classdef ksGUI < handle
             conn = obj.P.chanMap.connected;
             chanMap.chanMap = obj.P.chanMap.chanMap(conn); 
             chanMap.xcoords = obj.P.chanMap.xcoords(conn); 
-            chanMap.ycoords = obj.P.chanMap.ycoords(conn); 
+            chanMap.ycoords = obj.P.chanMap.ycoords(conn);
+            if isfield(obj.P.chanMap, 'kcoords')
+                chanMap.kcoords = obj.P.chanMap.kcoords(conn);
+            end
             obj.ops.chanMap = chanMap;
             
             % sanitize options set in the gui
@@ -701,7 +704,7 @@ classdef ksGUI < handle
             obj.H.settings.setThEdt.String = num2str(obj.ops.Th);
             
             obj.ops.lam = str2num(obj.H.settings.setLambdaEdt.String);
-            if isempty(obj.ops.lam) || isnan(obj.ops.lam)
+            if isempty(obj.ops.lam)||isnan(obj.ops.lam)
                 obj.ops.lam = 10;
             end
             obj.H.settings.setLambdaEdt.String = num2str(obj.ops.lam);
@@ -726,7 +729,7 @@ classdef ksGUI < handle
             
             % do preprocessing
             obj.ops.gui = obj; % for kilosort to access, e.g. calling "log"
-%             try
+            try
                 obj.log('Preprocessing...'); 
                 obj.rez = preprocessDataSub(obj.ops);
                 
@@ -757,10 +760,10 @@ classdef ksGUI < handle
                 % update gui with results of preprocessing
                 obj.updateDataView();
                 obj.log('Done preprocessing.'); 
-%             catch ex
-%                 obj.log(sprintf('Error preprocessing! %s', ex.message));
-%                 keyboard
-%             end
+            catch ex
+                obj.log(sprintf('Error preprocessing! %s', ex.message));
+                keyboard
+            end
             
         end
         
@@ -784,7 +787,7 @@ classdef ksGUI < handle
         
         function runSpikesort(obj)
             % fit templates
-%             try
+            try
                 % pre-clustering to re-order batches by depth
                 obj.log('Pre-clustering to re-order batches by depth')
                 obj.rez = clusterSingleBatches(obj.rez);
@@ -816,9 +819,9 @@ classdef ksGUI < handle
                 obj.log('Kilosort finished!');  fprintf('\tKilosort finished!\n');
                 set(obj.H.settings.runSaveBtn, 'enable', 'on');
                 obj.updateDataView();
-%             catch ex
-%                 obj.log(sprintf('Error running kilosort! %s', ex.message));
-%             end   
+            catch ex
+                obj.log(sprintf('Error running kilosort! %s', ex.message));
+            end   
                         
         end
         
@@ -875,7 +878,7 @@ classdef ksGUI < handle
                     % filtered, whitened
                     obj.prepareForRun();
                     datAllF = ksFilter(datAll, obj.ops);
-                    datAllF = double(gather_try(datAllF));
+                    datAllF = double(gather(datAllF));
                     if isfield(obj.P, 'Wrot') && ~isempty(obj.P.Wrot)
                         %Wrot = obj.P.Wrot/obj.ops.scaleproc;
                         conn = obj.P.chanMap.connected;
@@ -884,7 +887,7 @@ classdef ksGUI < handle
                     end
                     datAllF = datAllF';
                     
-                    if obj.P.ksDone
+                    if obj.P.ksDone && isfield(obj.rez, 'W')
                         pd = predictData(obj.rez, samps);
                     else
                         pd = zeros(size(datAllF));
@@ -1642,6 +1645,8 @@ classdef ksGUI < handle
             if newCenter>mx; newCenter = mx; end
             if newCenter<mn; newCenter = mn; end
             dRange = dRange*scaleFactor;
+            maxRangeSec = 4; % prevent rendering overflow
+            dRange(dRange>maxRangeSec) = maxRangeSec;
             
             if dRange>(mx-mn); dRange = mx-mn; end
             newRange = newCenter+[-0.5 0.5]*dRange;
