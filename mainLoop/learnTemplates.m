@@ -289,6 +289,21 @@ rez.nsp = nsp;
 
 % save('rez_mid.mat', 'rez');
 
+% name figure
+if ops.fig
+    try
+        fsz = 10; % info font size
+        infostr = {sprintf('Sorted on: %s',datestr(now)), sprintf('Raw data:\t%s',ops.fbinary), sprintf('Output dir:\t%s',ops.saveDir)};
+        % add axis for text info
+        axes('position',[0,.002,1,.02],'visible','off');
+        % shrinking text if multiple lines
+        if contains(infostr, {sprintf('\n'),sprintf('\n\r')}), fsz = 8; end
+        text(0,0, infostr, 'verticalAlignment','bottom', 'interpreter','none', 'fontsize',fsz);
+    catch ME
+        warning(ME.identifier,'Error labeling figure was: %s',ME.message);
+    end
+end
+
 fprintf('Finished learning templates \n')
 %%
 

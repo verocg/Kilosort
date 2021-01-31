@@ -626,8 +626,9 @@ classdef ksGUI < handle
             evalin('base', 'fprintf(2,''ks.ops =\n''), disp(ks.ops)'); % show current parameters in command window
         end
         
+        
         function runAll(obj)
-            
+            % [Run All] button clicked
             obj.P.ksDone = false;
             
             obj.runPreproc;
@@ -721,12 +722,12 @@ classdef ksGUI < handle
         end
         
         function runPreproc(obj)
-            
+            % [Preprocess] button clicked            
             obj.prepareForRun;
             
             % do preprocessing
             obj.ops.gui = obj; % for kilosort to access, e.g. calling "log"
-            try
+%             try
                 obj.log('Preprocessing...'); 
                 obj.rez = preprocessDataSub(obj.ops);
                 obj.rez = datashift2(obj.rez, 1);
@@ -758,10 +759,10 @@ classdef ksGUI < handle
                 % update gui with results of preprocessing
                 obj.updateDataView();
                 obj.log('Done preprocessing.'); 
-            catch ex
-                obj.log(sprintf('Error preprocessing! %s', ex.message));
-                keyboard
-            end
+%             catch ex
+%                 obj.log(sprintf('Error preprocessing! %s', ex.message));
+%                 keyboard
+%             end
             
         end
         
@@ -784,8 +785,9 @@ classdef ksGUI < handle
         end
         
         function runSpikesort(obj)
+            % [Spikesort] button clicked
             % fit templates
-            try
+%             try
                 % pre-clustering to re-order batches by depth
 %                 obj.log('Pre-clustering to re-order batches by depth')
 %                 obj.rez = clusterSingleBatches(obj.rez);
@@ -816,13 +818,14 @@ classdef ksGUI < handle
                 obj.log('Kilosort finished!');    fprintf('\tKilosort finished!\n');
                 set(obj.H.settings.runSaveBtn, 'enable', 'on');
                 obj.updateDataView();
-            catch ex
-                obj.log(sprintf('Error running kilosort! %s', ex.message));
-            end   
+%             catch ex
+%                 obj.log(sprintf('Error running kilosort! %s', ex.message));
+%             end   
                         
         end
         
-        function runSaveToPhy(obj)            
+        function runSaveToPhy(obj)
+            % [Save for Phy] button clicked
             % save results
             obj.log(sprintf('Saving data to %s', obj.ops.saveDir));
             % discard features in final rez file (too slow to save)
@@ -835,11 +838,11 @@ classdef ksGUI < handle
             fname = fullfile(obj.ops.saveDir, 'rez.mat');
             save(fname, 'rez', '-v7.3');
             
-            try
+%             try
                 rezToPhy(obj.rez, obj.ops.saveDir);
-            catch ex
-                obj.log(sprintf('Error saving data for phy! %s', ex.message));
-            end            
+%             catch ex
+%                 obj.log(sprintf('Error saving data for phy! %s', ex.message));
+%             end            
             obj.log('Done');
         end
             
@@ -1504,12 +1507,16 @@ classdef ksGUI < handle
             saveDat.rez.ops.gui = [];
             saveDat.P = obj.P;
             
-            if ~strcmp(obj.H.settings.ChooseFileEdt.String, '...')
-                [p,fn] = fileparts(obj.H.settings.ChooseFileEdt.String);            
-                savePath = fullfile(p, [fn '_ksSettings.mat']);
-                save(savePath, 'saveDat', '-v7.3');
-            end            
-            
+            try
+                savePath = [];
+                if ~strcmp(obj.H.settings.ChooseFileEdt.String, '...')
+                    [p,fn] = fileparts(obj.H.settings.ChooseFileEdt.String);
+                    savePath = fullfile(p, [fn '_ksSettings.mat']);
+                    save(savePath, 'saveDat', '-v7.3');
+                end
+            catch
+               fprintf('Error occurred when attempting to save kilosort GUI settings:  %s\n', savePath); 
+            end
             %obj.refocus(obj.H.settings.saveBtn);
         end
         
