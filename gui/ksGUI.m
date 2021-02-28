@@ -1,5 +1,3 @@
-
-
 classdef ksGUI < handle
     % GUI for kilosort
     %
@@ -94,6 +92,7 @@ classdef ksGUI < handle
             % construct the GUI with appropriate panels
             obj.H.fig = f;
             obj.H.fsz = 16; % base font size
+            obj.H.tracelw = 1; % base trace linewidth
             set(f, 'UserData', obj);
             
             set(f, 'KeyPressFcn', @(f,k)obj.keyboardFcn(f, k));
@@ -252,15 +251,15 @@ classdef ksGUI < handle
             
             obj.H.settings.ChooseFileEdt = uicontrol(...
                 'Parent', obj.H.settingsGrid,...
-                'Style', 'edit', 'HorizontalAlignment', 'left', ...
+                'Style', 'edit', 'HorizontalAlignment', 'right', ...
                 'String', '...', 'Callback', @(~,~)obj.updateFileSettings());
             obj.H.settings.ChooseTempdirEdt = uicontrol(...
                 'Parent', obj.H.settingsGrid,...
-                'Style', 'edit', 'HorizontalAlignment', 'left', ...
+                'Style', 'edit', 'HorizontalAlignment', 'right', ...
                 'String', '...', 'Callback', @(~,~)obj.updateFileSettings());
             obj.H.settings.ChooseOutputEdt = uicontrol(...
                 'Parent', obj.H.settingsGrid,...
-                'Style', 'edit', 'HorizontalAlignment', 'left', ...
+                'Style', 'edit', 'HorizontalAlignment', 'right', ...
                 'String', '...', 'Callback', @(~,~)obj.updateFileSettings());
             
             probeNames = {obj.P.allChanMaps.name};
@@ -278,7 +277,7 @@ classdef ksGUI < handle
             obj.H.settings.setFsEdt = uicontrol(...
                 'Parent', obj.H.settingsGrid,...
                 'Style', 'edit', 'HorizontalAlignment', 'left', ...
-                'String', '30000', 'Callback', @(~,~)obj.updateFileSettings());            
+                'String', '40000', 'Callback', @(~,~)obj.updateFileSettings());            
             obj.H.settings.setTrangeEdt = uicontrol(...
                 'Parent', obj.H.settingsGrid,...
                 'Style', 'edit', 'HorizontalAlignment', 'left', ...
@@ -490,14 +489,17 @@ classdef ksGUI < handle
             pathname = uigetdir(startDir, 'Pick a directory.');
             
             if pathname~=0 % 0 when cancel
-                switch src.Tag
-                    case 'output'
-                        obj.H.settings.ChooseOutputEdt.String = pathname;
-                    case 'temp'
-                        obj.H.settings.ChooseTempdirEdt.String = pathname;
-                end
+                % Kilosort3:  Output & temp dirs are [must be] same now that temp_wh is not truly "temp"
+                obj.H.settings.ChooseOutputEdt.String = pathname;
+                obj.H.settings.ChooseTempdirEdt.String = pathname;
+                % %                 switch src.Tag
+                % %                     case 'output'
+                % %                         obj.H.settings.ChooseOutputEdt.String = pathname;
+                % %                     case 'temp'
+                % %                         obj.H.settings.ChooseTempdirEdt.String = pathname;
+                % %                 end
+                obj.updateFileSettings();
             end
-            obj.updateFileSettings();
         end
         
         function updateFileSettings(obj)
@@ -653,7 +655,7 @@ classdef ksGUI < handle
             obj.ops.fproc = fullfile(wd, 'temp_wh.dat');
             
             obj.ops.saveDir = obj.H.settings.ChooseOutputEdt.String;
-            if ~exist(obj.ops.saveDir, 'dir')
+            if ~exist(obj.ops.saveDir, 'dir') && ~contains(obj.ops.saveDir,'...')
                 mkdir(obj.ops.saveDir);
             end
             
@@ -684,14 +686,14 @@ classdef ksGUI < handle
             
             obj.ops.nblocks = str2double(obj.H.settings.setMinfrEdt.String);
             if isempty(obj.ops.nblocks)||isnan(obj.ops.nblocks)
-                obj.ops.nblocks = 5;
+                obj.ops.nblocks = 1;
             end
             obj.ops.throw_out_channels = false;
             obj.H.settings.setMinfrEdt.String = num2str(obj.ops.nblocks);
 
             obj.ops.fs = str2num(obj.H.settings.setFsEdt.String);
             if isempty(obj.ops.fs)||isnan(obj.ops.fs)
-                obj.ops.fs = 30000;
+                obj.ops.fs = 40000;
             end
                         
             obj.ops.Th = str2num(obj.H.settings.setThEdt.String);
@@ -754,6 +756,7 @@ classdef ksGUI < handle
                 
                 % reset spikesorting run status flag
                 obj.P.ksDone = false;
+                obj.P.showWhitened = true;
                 
                 % update gui with results of preprocessing
                 obj.updateDataView();
@@ -927,7 +930,7 @@ classdef ksGUI < handle
                                 obj.H.dataTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
-                                    obj.H.dataTr(q) = plot(obj.H.dataAx, 0, NaN, 'k', 'LineWidth', 1.5);
+                                    obj.H.dataTr(q) = plot(obj.H.dataAx, 0, NaN, 'k', 'LineWidth', obj.H.tracelw);
                                     set(obj.H.dataTr(q), 'HitTest', 'off');
                                 end
                                 box(obj.H.dataAx, 'off');
@@ -959,7 +962,7 @@ classdef ksGUI < handle
                                 obj.H.ppTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
-                                    obj.H.ppTr(q) = plot(obj.H.dataAx, 0, NaN, 'Color', [0 0.6 0], 'LineWidth', 1.5);
+                                    obj.H.ppTr(q) = plot(obj.H.dataAx, 0, NaN, 'Color', [0 0.6 0], 'LineWidth', obj.H.tracelw);
                                     set(obj.H.ppTr(q), 'HitTest', 'off');
                                 end
                             end
@@ -989,7 +992,7 @@ classdef ksGUI < handle
                                 obj.H.predTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
-                                    obj.H.predTr(q) = plot(obj.H.dataAx, 0, NaN, 'b', 'LineWidth', 1.5);
+                                    obj.H.predTr(q) = plot(obj.H.dataAx, 0, NaN, 'b', 'LineWidth', obj.H.tracelw);
                                     set(obj.H.predTr(q), 'HitTest', 'off');
                                 end
                             end
@@ -1019,7 +1022,7 @@ classdef ksGUI < handle
                                 obj.H.residTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
-                                    obj.H.residTr(q) = plot(obj.H.dataAx, 0, NaN, 'r', 'LineWidth', 1.5);
+                                    obj.H.residTr(q) = plot(obj.H.dataAx, 0, NaN, 'r', 'LineWidth', obj.H.tracelw);
                                     set(obj.H.residTr(q), 'HitTest', 'off');
                                 end
                             end

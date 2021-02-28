@@ -150,3 +150,5 @@ rez1.W = reshape(rez.wPCA, [ops.nt0, 1, 6]);
 rez1.W = repmat(rez1.W, [1, n0, 1]);
 rez1.est_contam_rate = ones(n0,1);
 
+end
+

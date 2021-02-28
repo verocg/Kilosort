@@ -53,8 +53,8 @@ Nnearest    = min(ops.Nchan, 32);
 % decay of gaussian spatial mask centered on a channel
 sigmaMask  = ops.sigmaMask;
 
-% spike threshold for finding missed spikes in residuals
-ops.spkTh = -6; % why am I overwriting this here?
+% % spike threshold for finding missed spikes in residuals
+% ops.spkTh = -6; % why am I overwriting this here?
 
 batchstart = 0:NT:NT*nBatches;
 
@@ -240,4 +240,4 @@ rez.iC = iC;
 
 fWpc = permute(fWpc, [3, 2, 1]);
 
-%%
+end

@@ -1,5 +1,4 @@
-function [dprev, dat_cpu, dat, shifts] = ...
-    shift_batch_on_disk2(rez, ibatch, shifts, ysamp, sig, dprev)
+function [dprev, dat_cpu, dat, shifts] = shift_batch_on_disk2(rez, ibatch, shifts, ysamp, sig, dprev)
 % register one batch of a whitened binary file
 
 ops = rez.ops;

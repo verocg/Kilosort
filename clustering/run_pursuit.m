@@ -1,28 +1,31 @@
 function kid = run_pursuit(data, nlow, rmin, n0, wroll, ss, use_CCG)
 
+verbo = 1;
+
 Xd = gpuArray(data(:, :));
 amps = sum(Xd.^2, 2).^.5;
 
 kid = zeros(size(Xd,1), 1);
 
 aj = zeros(1000,1);
-for j = 1:1000
+for i = 1:1000
     ind = find(kid==0);
-%     fprintf('cluster %d\n', n0+j)
-    [ix, xold, xnew] = break_a_cluster(Xd(ind, :), wroll, ss(ind), nlow, rmin, use_CCG);
+    if verbo, fprintf('cluster %d\n', n0+i); end
+    ix = break_a_cluster(Xd(ind, :), wroll, ss(ind), nlow, rmin, use_CCG);  % [ix, xold, xnew] =
     
-    aj(j) = gather(mean(amps(ind(ix))));
-%     fprintf('amps = %2.2f \n\n', aj(j));
-    kid(ind(ix)) = j;
+    aj(i) = gather(mean(amps(ind(ix))));
+    if verbo, fprintf('\tamps = %2.2f \n', aj(i)); end
+    
+    kid(ind(ix)) = i;
  
     if length(ix) == length(ind)
         break;
     end
     
 end
-aj = aj(1:j);
+aj = aj(1:i);
 
-end
+% end %main function
 
 
 function [ix, xold, x] = break_a_cluster(data,wroll,  ss, nlow, rmin, use_CCG)
@@ -34,14 +37,14 @@ for j = 1:10
     dd = data(ix, :);
     if length(ix) < 2 * nlow
         x = [];
-%         disp('done with this cluster (too small)')
+        if verbo, fprintf(2,'\n\tdone with this cluster (too small)\t'); end
         break;
     end
     
     [x, iclust, flag] = bimodal_pursuit(dd, wroll, ss(ix), rmin, nlow, 1, use_CCG);
     
     if flag==0
-%        disp('done with this cluster')
+        if verbo, fprintf('\n\tdone with this cluster\t'); end
        break;
     end
 
@@ -77,3 +80,5 @@ end
 dd = dd(:,:);
 
 end
+
+end %main function

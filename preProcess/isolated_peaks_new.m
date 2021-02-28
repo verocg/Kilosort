@@ -7,8 +7,6 @@ long_range = getOr(ops, 'long_range', [30 6]);
 Th = ops.spkTh;
 nt0 = ops.nt0;
 
-% loc_range = [3  1];
-% long_range = [30  6];
 
 % finding the local minimum in a sliding window within plus/minus loc_range extent
 % across time and across channels

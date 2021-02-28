@@ -15,8 +15,8 @@ for j = 1:length(tlag)
 end
 
 %% split templates into batches
-rmin = 0.6;
-nlow = 100;
+rmin = 0.6;%  0.6;
+nlow = 30; %100;
 n0 = 0;
 use_CCG = 0;
 
@@ -91,14 +91,16 @@ for j = 1:numel(ycenter)
 end
 Wpca = Wpca(:,:,1:n0);
 toc
-%%
-rez.W = zeros(61,0, 3, 'single');
-rez.U = zeros(ops.Nchan,0,3, 'single');
+
+%% Impose consistent waveform polarity on PCs
+% Done to avoid templates from fracturing into arbitrary batch-sized clusters ("stuttering")
+rez.W = zeros(ops.nt0,   0,3, 'single');
+rez.U = zeros(ops.Nchan, 0,3, 'single');
 rez.mu = zeros(1,0, 'single');
 for  t = 1:n0
     dWU = wPCA * gpuArray(Wpca(:,:,t));
     [w,s,u] = svdecon(dWU);
-    wsign = -sign(w(21,1));
+    wsign = -sign(w(ops.nt0min+1, 1));
     rez.W(:,t,:) = gather(wsign * w(:,1:3));
     rez.U(:,t,:) = gather(wsign * u(:,1:3) * s(1:3,1:3));
     rez.mu(t) = gather(sum(sum(rez.U(:,t,:).^2))^.5);
@@ -107,4 +109,6 @@ end
 
 %%
 rez.ops.wPCA = wPCA;
+
+end
 

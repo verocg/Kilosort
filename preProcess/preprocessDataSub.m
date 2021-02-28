@@ -54,34 +54,56 @@ rez.ops.chanMap = chanMap;
 fprintf('Time %3.0fs. Computing whitening matrix.. \n', toc);
 
 % this requires removing bad channels first
-Wrot = get_whitening_matrix(rez); % outputs a rotation matrix (Nchan by Nchan) which whitens the zero-timelag covariance of the data
+Wrot = get_whitening_matrix_faster(rez); % outputs a rotation matrix (Nchan by Nchan) which whitens the zero-timelag covariance of the data
 % Wrot = gpuArray.eye(size(Wrot,1), 'single');
 % Wrot = diag(Wrot);
 
 fprintf('Time %3.0fs. Loading raw data and applying filters... \n', toc);
 
+% % %         % Memory map the raw data file to m.Data.x of size [nChan, nSamples)
+% % %         mmfRaw = dir(ops.fbinary);
+% % %         nsamp = mmfRaw.bytes/2/ops.NchanTOT;
+% % %         mmfRaw = memmapfile(ops.fbinary, 'Format',{'int16', [ops.NchanTOT, nsamp], 'x'}); % ignore tstart here b/c we'll account for it on each mapped read (using .twind)
+
 fid         = fopen(ops.fbinary, 'r'); % open for reading raw data
 if fid<3
     error('Could not open %s for reading.',ops.fbinary);
 end
-fidW        = fopen(ops.fproc,   'w+'); % open for writing processed data
+
+fidW        = fopen(ops.fproc,   'wb+'); % open for writing processed data
 if fidW<3
     error('Could not open %s for writing.',ops.fproc);    
 end
+
+        % slice ops for parallel
+        ntbuff = ops.ntbuff; % NOTE: this is just the buffer length, not ".NTbuff" (which == the actual batch + buffer length)
+        NT = ops.NT;
+        bufferedNT = NT + 2*ntbuff;
+        tend = ops.tend;
+        twind = ops.twind;
 
 % weights to combine batches at the edge
 w_edge = linspace(0, 1, ops.ntbuff)';
 ntb = ops.ntbuff;
 datr_prev = gpuArray.zeros(ntb, ops.Nchan, 'single');
 
-for ibatch = 1:Nbatch
+% scrappy progress bar in command window
+allBatches = 1:Nbatch;
+pb = progBar(allBatches, 20);
+
+for ibatch = allBatches
     % we'll create a binary file of batches of NT samples, which overlap consecutively on ops.ntbuff samples
     % in addition to that, we'll read another ops.ntbuff samples from before and after, to have as buffers for filtering
     offset = max(0, ops.twind + 2*NchanTOT*(NT * (ibatch-1) - ntb)); % number of samples to start reading at.
-    
     fseek(fid, offset, 'bof'); % fseek to batch start in raw file
-
     buff = fread(fid, [NchanTOT NTbuff], '*int16'); % read and reshape. Assumes int16 data (which should perhaps change to an option)
+    
+% % %         % Memory mapped read
+% % %         twindow = [max(1, twind + NT*(ibatch-1) - ntb): min(tend, twind + NT*(ibatch) + ntb)];
+% % %         % read from memory mapped file
+% % %         buff = mmfRaw.Data.x(:,twindow);
+
+    
     if isempty(buff)
         break; % this shouldn't really happen, unless we counted data batches wrong
     end
@@ -89,6 +111,12 @@ for ibatch = 1:Nbatch
     if nsampcurr<NTbuff
         buff(:, nsampcurr+1:NTbuff) = repmat(buff(:,nsampcurr), 1, NTbuff-nsampcurr); % pad with zeros, if this is the last batch
     end
+    
+% % %         if twindow(1)==1
+% % %             bpad = repmat(buff(:,1), 1, ntb);
+% % %             buff = cat(2, bpad, buff(:, 1:NTbuff-ntb)); % The very first batch has no pre-buffer, and has to be treated separately
+% % %         end
+    
     if offset==0
         bpad = repmat(buff(:,1), 1, ntb);
         buff = cat(2, bpad, buff(:, 1:NTbuff-ntb)); % The very first batch has no pre-buffer, and has to be treated separately
@@ -107,6 +135,9 @@ for ibatch = 1:Nbatch
 
     datcpu  = gather(int16(datr')); % convert to int16, and gather on the CPU side
     count = fwrite(fidW, datcpu, 'int16'); % write this batch to binary file
+    
+    pb.check(ibatch) % update progress bar in command window
+    
     if count~=numel(datcpu)
         error('Error writing batch %g to %s. Check available disk space.',ibatch,ops.fproc);
     end

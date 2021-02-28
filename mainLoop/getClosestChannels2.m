@@ -20,3 +20,4 @@ ix = iC + [0:Nchan:Nchan*NchanUp-1]; % this is an awkward indexing to get the co
 dist = gpuArray(single(C2C(ix)));
 iC = gpuArray(int32(iC)); % iC and mask live on the GPU
 
+end

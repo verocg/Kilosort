@@ -1,5 +1,7 @@
 function [x, iclust, flag] = bimodal_pursuit(Xd, wroll, ss, rmin, nlow, retry, use_CCG)
 
+verbo = 1;
+
 dt = 1/1000;
 clp = Xd;
 
@@ -75,7 +77,7 @@ end
 n1 = sum(rs(:,1)>.5);
 n2 = sum(rs(:,2)>.5);
 nmin = min(n1, n2);
-% fprintf('%6.0d, %6.0d, %2.2f, %2.2f, %2.4f \n', n1, n2, rr(1), rr(2), abs(mu1-mu2));
+if verbo, fprintf('\t%6.0d, %6.0d, %2.2f, %2.2f, %2.4f \n', n1, n2, rr(1), rr(2), abs(mu1-mu2)); end
 
 flag = 1;
 iclust = rs(:,1)>.5;
@@ -102,7 +104,7 @@ if flag==1
     dmu = 2 * abs(m1-m2)/(m1+m2);
     if rc>.9 && dmu<.2
         flag = 0;
-%         fprintf('veto from similarity r = %2.2f, dmu = %2.2f, roll = %d \n', rc, dmu, do_roll)
+        if verbo,  fprintf(2,'\tveto from similarity r = %2.2f, dmu = %2.2f, roll = %d \n', rc, dmu, do_roll); end
     end
 end
 
@@ -113,7 +115,7 @@ if use_CCG && (flag==1)
     Q12 = min(Qi/max(Q00, Q01)); % refractoriness metric 1
     R = min(rir);                % refractoriness metric 2
     if Q12<.25 && R<.05 % if both metrics are below threshold.
-%         disp('veto from CCG')
+        if verbo, fprintf(2,'\tveto from CCG'); end
         flag = 0;
     end
 end
@@ -125,13 +127,14 @@ end
 if (flag==0) && (retry>0)
     w = w / sum(w.^2).^.5;
     clp = Xd - (Xd * w') * w;
-%     disp('one more try')
+    if verbo,     disp('one more try'); end
     [x, iclust, flag] = bimodal_pursuit(clp, wroll, ss, rmin, nlow, retry-1, use_CCG);
 end
 
 % sd = sum(mu_clp.^2)^.5;
 
 end
+
 
 function u = nonrandom_projection(clp)
 npow = 6;

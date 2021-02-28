@@ -11,7 +11,7 @@ NrankPC = size(rez.wPCA, 2);
 ops = rez.ops;
 
 % minimum/base sigma for the Gaussian. 
-sig = 10;
+sig = ops.sig;%10;
 
 % grid of centers for the generic tempates
 [ycup, xcup] = meshgrid(ops.yup, ops.xup);

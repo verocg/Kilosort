@@ -47,8 +47,8 @@ rez                = final_clustering(rez, tF, st3);
 
 rez                = find_merges(rez, 1);
 
-rootZ = fullfile(rootZ, 'kilosort3');
-mkdir(rootZ)
+% rootZ = fullfile(rootZ, 'kilosort3');
+% mkdir(rootZ)
 rezToPhy2(rez, rootZ);
 
 %% 
