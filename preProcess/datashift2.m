@@ -16,22 +16,53 @@ xmax = max(rez.xc);
 % Determine the average vertical spacing between channels. 
 % Usually all the vertical spacings are the same, i.e. on Neuropixels probes. 
 dmin = median(diff(unique(rez.yc)));
-fprintf('pitch is %d um\n', dmin)
+fprintf('Computing datashift alignment...\n')
+fprintf('\tvertical pitch size is %d \n', dmin)
+rez.ops.dmin = dmin;
 rez.ops.yup = ymin:dmin/2:ymax; % centers of the upsampled y positions
 
 % Determine the template spacings along the x dimension
-xrange = xmax - xmin;
-npt = floor(xrange/16); % this would come out as 16um for Neuropixels probes, which aligns with the geometry. 
-rez.ops.xup = linspace(xmin, xmax, npt+1); % centers of the upsampled x positions
+% dminx = median(diff(unique(rez.xc)));
+yunq = unique(rez.yc);
+mxc = zeros(numel(yunq), 1);
+for j = 1:numel(yunq)
+    xc = rez.xc(rez.yc==yunq(j));
+    if numel(xc)>1
+       mxc(j) = median(diff(sort(xc))); 
+    end
+end
+dminx = median(mxc);
+fprintf('\thorizontal pitch size is %d \n', dminx)
 
-spkTh = 8; % same as the usual "template amplitude", but for the generic templates
+rez.ops.dminx = dminx;
+nx = round((xmax-xmin) / (dminx/2)) + 1;
+rez.ops.xup = linspace(xmin, xmax, nx); % centers of the upsampled x positions
+disp(rez.ops.xup) 
+
+
+if  getOr(rez.ops, 'nblocks', 1)==0
+    rez.iorig = 1:rez.temp.Nbatch;
+    return;
+end
+
+
+
+% binning width across Y (um)
+dd = 10;% 5;
+%   - rest of drift computation relies on indices of this sampling res.
+%   - If dd res is too low/high for electrode spacing, drift fit will be suboptimal
+% min and max for the range of depths
+dmin = ymin - 1;
+dmax  = 1 + ceil((ymax-dmin)/dd);
+disp(dmax)
+
+
+spkTh = 10;%ops.ThPre; %10;% [10] same as the usual "template amplitude", but for the generic templates
 
 % Extract all the spikes across the recording that are captured by the
 % generic templates. Very few real spikes are missed in this way. 
 [st3, rez] = standalone_detector(rez, spkTh);
 %%
-% binning width across Y (um)
-dd = 5;
 
 % detected depths
 dep = st3(:,2);
@@ -42,6 +73,7 @@ dep = dep - dmin;
 
 dmax  = 1 + ceil(max(dep)/dd);
 Nbatches      = rez.temp.Nbatch;
+batchSec      = ops.NT/ops.fs;
 
 % which batch each spike is coming from
 batch_id = st3(:,5); %ceil(st3(:,1)/dt);
@@ -71,23 +103,14 @@ for t = 1:Nbatches
 end
 
 %%
-% the 'midpoint' branch is for chronic recordings that have been
-% concatenated in the binary file
-if isfield(ops, 'midpoint')
-    % register the first block as usual
-    [imin1, F1] = align_block(F(:, :, 1:ops.midpoint));
-    % register the second block as usual
-    [imin2, F2] = align_block(F(:, :, ops.midpoint+1:end));
-    % now register the average first block to the average second block
-    d0 = align_pairs(F1, F2);
+% determine registration offsets
+ysamp = dmin + dd * [1:dmax] - dd/2;
+[imin,yblk, F0, F0m] = align_block2(F, ysamp, ops.nblocks);
+
+if isfield(rez, 'F0')
+    d0 = align_pairs(rez.F0, F0);
     % concatenate the shifts
-    imin = [imin1 imin2 + d0];
-    imin = imin - mean(imin);
-    ops.datashift = 1;
-else
-    % determine registration offsets 
-    ysamp = dmin + dd * [1:dmax] - dd/2;
-    [imin,yblk, F0, F0m] = align_block2(F, ysamp, ops.nblocks);
+    imin = imin - d0;
 end
 
 %%
@@ -97,28 +120,37 @@ if getOr(ops, 'fig', 1)
     
     % plot the shift trace in um
     plot(imin * dd)
+    box off
     xlabel('batch number')
     ylabel('drift (um)')
     title('Estimated drift traces')
     drawnow
     
-    figure;
-    set(gcf, 'Color', 'w')
     % raster plot of all spikes at their original depths
-    st_shift = st3(:,2); %+ imin(batch_id)' * dd;
+    ii = st3(:,3)>=spkTh;
+    st_depth0 = st3(ii,2);
+    st_depthD = st_depth0 + imin(batch_id(:)) * dd;
+    xs = (.5:1:Nbatches)*batchSec;
+    figure
+    hax1 = subplot(2,1,1); hold on; box off
+    hax2 = subplot(2,1,2); hold on; box off
+
     for j = spkTh:100
         % for each amplitude bin, plot all the spikes of that size in the
         % same shade of gray
         ix = st3(:, 3)==j; % the amplitudes are rounded to integers
-        plot(st3(ix, 1)/ops.fs, st_shift(ix), '.', 'color', [1 1 1] * max(0, 1-j/40)) % the marker color here has been carefully tuned
-        hold on
+        thisCol = [1 1 1] * max(0, 1-j/60);
+        plot(hax1, st3(ix, 1)/ops.fs, st_depth0(ix), '.', 'color', thisCol) % the marker color here has been carefully tuned
+        plot(hax2, st3(ix, 1)/ops.fs, st_depthD(ix), '.', 'color', thisCol) % the marker color here has been carefully tuned
     end
     axis tight
-    box off
-    
-    xlabel('time (sec)')
-    ylabel('spike position (um)')
-    title('Drift map')
+    linkaxes([hax1,hax2]);
+    plot(hax1, xs, imin * dd +diff(ylim(hax2))/2, '-r');
+
+    xlabel(hax2, 'time (sec)')
+    ylabel(hax1, 'Init spike position (um)')
+    ylabel(hax2, 'Drifted spike position (um)')
+    title(hax1, 'Drift map')
     
 end
 %%
@@ -151,7 +183,5 @@ rez.F0m = F0m;
 
 % next, we can just run a normal spike sorter, like Kilosort1, and forget about the transformation that has happened in here 
 
-%%
-
-
+end
 

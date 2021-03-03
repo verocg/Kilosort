@@ -24,3 +24,6 @@ ix = indsT + (indsC-1) * nT; % believe it or not, these indices grab just the ri
 
 % grab the data and reshape it appropriately (time samples  by channels by num spikes)
 clips = reshape(dataRAW(ix), numel(dt), numel(dc), numel(row));
+
+end
+

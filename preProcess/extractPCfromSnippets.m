@@ -3,6 +3,7 @@ function wPCA = extractPCfromSnippets(rez, nPCs)
 % loads a subset of batches to find these snippets
 
 ops = rez.ops;
+nskip = getOr(ops, 'nskip', 25)
 Nbatch      = rez.temp.Nbatch;
 NT  	= ops.NT;
 batchstart = 0:NT:NT*Nbatch;
@@ -11,7 +12,7 @@ batchstart = 0:NT:NT*Nbatch;
 CC = zeros(ops.nt0); % initialize the covariance of single-channel spike waveforms
 fid = fopen(ops.fproc, 'r'); % open the preprocessed data file
 
-for ibatch = 1:100:Nbatch % from every 100th batch
+for ibatch = 1:nskip:Nbatch % from every nth batch
     offset = 2 * ops.Nchan*batchstart(ibatch);
     fseek(fid, offset, 'bof');
     dat = fread(fid, [NT ops.Nchan], '*int16');

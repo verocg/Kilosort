@@ -11,7 +11,7 @@ function [st3, rez] = standalone_detector(rez, spkTh)
 ops = rez.ops;
 
 % minimum/base sigma for the Gaussian. 
-sig = 10;
+sig = ops.sig;%10;
 
 % grid of centers for the generic tempates
 [ycup, xcup] = meshgrid(ops.yup, ops.xup);
@@ -28,7 +28,7 @@ NchanNear = 10;
 [iC, dist] = getClosestChannels2(ycup, xcup, rez.yc, rez.xc, NchanNear);
 
 % Templates with centers that are far from an active site are discarded
-dNearActiveSite = 30; 
+dNearActiveSite = median(diff(unique(rez.yc)));
 igood = dist(1,:)<dNearActiveSite;
 iC = iC(:, igood);
 dist = dist(:, igood);
@@ -36,8 +36,7 @@ ycup = ycup(igood);
 xcup = xcup(igood);
 
 % number of nearby templates to compare for local template maximum
-NchanNearUp =  10*NchanNear;
-NchanNearUp = min([numel(ycup), numel(xcup), NchanNearUp]);
+NchanNearUp =  min(numel(xcup), 10*NchanNear);
 [iC2, dist2] = getClosestChannels2(ycup, xcup, ycup, xcup, NchanNearUp);
 
 % pregenerate the Gaussian weights used for spatial components 
