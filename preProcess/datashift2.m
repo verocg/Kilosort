@@ -28,8 +28,8 @@ for j = 1:numel(yunq)
        mxc(j) = median(diff(sort(xc))); 
     end
 end
-dminx = median(mxc);
-fprintf('\thorizontal pitch size is %d \n', dminx)
+dminx = max(5, median(mxc));
+fprintf('horizontal pitch size is %d \n', dminx)
 
 rez.ops.dminx = dminx;
 nx = round((xmax-xmin) / (dminx/2)) + 1;
