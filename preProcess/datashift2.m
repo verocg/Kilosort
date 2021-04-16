@@ -1,9 +1,17 @@
 function rez = datashift2(rez, do_correction)
 
+rez.iorig = 1:rez.temp.Nbatch;
+
 if  getOr(rez.ops, 'nblocks', 1)==0
-    rez.iorig = 1:rez.temp.Nbatch;
     return;
 end
+
+% display status of flag for whether to apply upsampled datashift (==1), datashift rounded to interger channel spacing (==2),
+% or no correction at all (just makes the datashift plots in that case)
+do_correction
+
+% flag for additional datashift plot of corrected data
+debugPlot =  getOr(ops, 'fig', 1)==2;
 
 ops = rez.ops;
 
@@ -37,7 +45,6 @@ fprintf('\thorizontal pitch size is %d \n', dminx)
 rez.ops.dminx = dminx;
 nx = round((xmax-xmin) / (dminx/2)) + 1;
 rez.ops.xup = linspace(xmin, xmax, nx); % centers of the upsampled x positions
-disp(rez.ops.xup) 
 
 
 if  getOr(rez.ops, 'nblocks', 1)==0
@@ -54,10 +61,9 @@ dd = 10;% 5;
 % min and max for the range of depths
 dmin = ymin - 1;
 dmax  = 1 + ceil((ymax-dmin)/dd);
-disp(dmax)
 
 
-spkTh = 10;%ops.ThPre; %10;% [10] same as the usual "template amplitude", but for the generic templates
+spkTh = 10; %ops.ThPre; %10;% [10] same as the usual "template amplitude", but for the generic templates
 
 % Extract all the spikes across the recording that are captured by the
 % generic templates. Very few real spikes are missed in this way. 
@@ -131,9 +137,11 @@ if getOr(ops, 'fig', 1)
     st_depth0 = st3(ii,2);
     st_depthD = st_depth0 + imin(batch_id(:)) * dd;
     xs = (.5:1:Nbatches)*batchSec;
-    figure
-    hax1 = subplot(2,1,1); hold on; box off
-    hax2 = subplot(2,1,2); hold on; box off
+    
+    H = figure;
+    set(H, 'name', 'driftMap')
+    hax1 = subplot(2+debugPlot,1,1); hold on; box off
+    hax2 = subplot(2+debugPlot,1,2); hold on; box off
 
     for j = spkTh:100
         % for each amplitude bin, plot all the spikes of that size in the
@@ -147,20 +155,30 @@ if getOr(ops, 'fig', 1)
     linkaxes([hax1,hax2]);
     plot(hax1, xs, imin * dd +diff(ylim(hax2))/2, '-r');
 
-    xlabel(hax2, 'time (sec)')
+    title(hax1, 'Drift map: Initial', 'interp','none')
     ylabel(hax1, 'Init spike position (um)')
-    ylabel(hax2, 'Drifted spike position (um)')
-    title(hax1, 'Drift map')
-    
+    title(hax2, 'Drift map: Corrected', 'interp','none')    
+    ylabel(hax2, 'Shifted spike position (um)')
+    xlabel(hax2, 'time (sec)')
+
+    % name figure
+    addFigInfo(ops, H);
+
 end
 %%
 % convert to um 
 dshift = imin * dd;
 
-% this is not really used any more, should get taken out eventually
-[~, rez.iorig] = sort(mean(dshift, 2));
+% NO@!!@  Please stop messing with time for drift correction!!!
+% % this is not really used any more, should get taken out eventually
+% [~, rez.iorig] = sort(mean(dshift, 2));
 
 if do_correction
+    if do_correction==2
+        % round shifts to integers of channel spacing
+        dmin = median(diff(unique(rez.yc)));
+        dshift = round(dshift./dmin).*dmin;
+    end
     % sigma for the Gaussian process smoothing
     sig = rez.ops.sig;
     % register the data batch by batch
@@ -183,5 +201,85 @@ rez.F0m = F0m;
 
 % next, we can just run a normal spike sorter, like Kilosort1, and forget about the transformation that has happened in here 
 
+% additional debug plotting
+% - slow & just for confirmation of what the ACTUAL saved whitened data looks like
+% - read back the newly shifted data and plot driftmap
+% - should look just like shifted driftmap, but with clipping on any channels that were shifted out of dat file register
+
+if debugPlot && any(rez.dshift)
+    
+    %% One more extraction & plot to show actual shifts applied
+    % This is slow, but reassuring.  ....disable when certain of parameters
+    
+    spkTh = 10;%ops.ThPre; %10;% [10] same as the usual "template amplitude", but for the generic templates
+    
+    % Extract all the spikes across the recording that are captured by the
+    % generic templates. Very few real spikes are missed in this way.
+    % - don't pass out rez struct this time
+    % - we don't want/need any of this to carry over, just checking our work
+    [st3] = standalone_detector(rez, spkTh);
+    
+    % detected depths
+    dep = st3(:,2);
+    
+    % min and max for the range of depths
+    dmin = ymin - 1;
+    dep = dep - dmin;
+    
+    dmax  = 1 + ceil(max(dep)/dd);
+    Nbatches      = rez.temp.Nbatch;
+    batchSec      = ops.NT/ops.fs;
+    
+    % which batch each spike is coming from
+    batch_id = st3(:,5); %ceil(st3(:,1)/dt);
+    
+    % preallocate matrix of counts with 20 bins, spaced logarithmically
+    F = zeros(dmax, 20, Nbatches);
+    for t = 1:Nbatches
+        % find spikes in this batch
+        ix = find(batch_id==t);
+        
+        % subtract offset
+        dep = st3(ix,2) - dmin;
+        
+        % amplitude bin relative to the minimum possible value
+        amp = log10(min(99, st3(ix,3))) - log10(spkTh);
+        
+        % normalization by maximum possible value
+        amp = amp / (log10(100) - log10(spkTh));
+        
+        % multiply by 20 to distribute a [0,1] variable into 20 bins
+        % sparse is very useful here to do this binning quickly
+        M = sparse(ceil(dep/dd), ceil(1e-5 + amp * 20), ones(numel(ix), 1), dmax, 20);
+        
+        % the counts themselves are taken on a logarithmic scale (some neurons
+        % fire too much!)
+        F(:, :, t) = log2(1+M);
+    end
+    
+    figure(H)
+    % raster plot of all spikes at their original depths
+    ii = st3(:,3)>=spkTh;
+    st_depth0 = st3(ii,2);
+    
+    hax3 = subplot(3,1,3); hold on; box off
+
+    for j = spkTh:100
+        % for each amplitude bin, plot all the spikes of that size in the
+        % same shade of gray
+        ix = st3(:, 3)==j; % the amplitudes are rounded to integers
+        thisCol = [1 1 1] * max(0, 1-j/60);
+        plot(hax3, st3(ix, 1)/ops.fs, st_depth0(ix), '.', 'color', thisCol) % the marker color here has been carefully tuned
+    end
+    axis tight
+    linkaxes([hax1,hax2,hax3]);
+    plot(hax3, xs, rez.dshift +diff(ylim(hax2))/2, '-r');
+
+    title(hax3, 'Drift map: Applied', 'interp','none')    
+    ylabel(hax3, 'Drifted spike position (um)')
+    xlabel(hax3, 'time (sec)')
 end
+
+
+end % main function
 

@@ -75,7 +75,7 @@ for iter = 1:niter
         % % %  F0 = mean(Fg, 3);
 
         % Scale breadth of new target frame across iterations
-        ii = targBatch + ceil([-.5 .5]*Nbatches/niter*(iter^2))
+        ii = targBatch + ceil([-.5 .5]*Nbatches/niter*(iter^2));
         ii(ii<1) = 1;   ii(ii>Nbatches) = Nbatches; % constrain valid indices
         F0 = mean(Fg(:,:, ii(1):ii(2)), 3);
 
