@@ -59,7 +59,7 @@ else
     DATA = [];
 end
 
-batchSubset = ceil(linspace(1,Nbatch,12);
+batchSubset = ceil(linspace(1,Nbatch,12));
 batchSubset = batchSubset(2:end-1);
 
 % ibatch = 1;
