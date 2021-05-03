@@ -1,10 +1,20 @@
 function [Wrot, CC] = get_whitening_matrix_faster(rez)
 % based on a subset of the data, compute a channel whitening matrix
 % this requires temporal filtering first (gpufilter)
+% 
+% [ks25] updates:
+% - faster version uses memory mapped file reads & parallelized batch processing
+%   to compute the whitening matrix
+% - no longer uses gpufilter.m so that demeaning is consistently applied BEFORE padding incomplete batches
+% 
+% ---
+% 202x-xx-xx  TBC  Evolved from standard get_whitening_matrix.m
+% 2021-04-28  TBC  Cleaned & commented; useMemMapping = 1 by default
+% 
 
 ops = rez.ops;
 Nbatch = ops.Nbatch;
-twind = ops.twind;
+twind = ops.twind; % Note: twind is pre-computed byte offset; twind~=tstart (for int16, twind==tstart*NchanTOT*2)
 NchanTOT = ops.NchanTOT;
 NT = ops.NT;
 NTbuff = ops.NTbuff;
@@ -20,17 +30,16 @@ ibatch = 1;
 ibatch = ibatch:ops.nSkipCov:Nbatch;
 
 % scrappy progress bar in command window
-% allBatches = 1:Nbatch;
 pb = progBar(ibatch, 20);
 
-if getOr(ops, 'useMemMapping',0)
+if getOr(ops, 'useMemMapping', 1)
     %% Parallelize raw data loading (needs memmapfile implement for parallel read access)
         % slice ops for parallel
         ntbuff = ops.ntbuff; % NOTE: this is just the buffer length, not ".NTbuff" (which == the actual batch + buffer length)
         NT = ops.NT;
         bufferedNT = NT + 2*ntbuff;
         tend = ops.tend;
-        twind = ops.twind;
+        tstart = ops.tstart;
         doCAR = logical(ops.CAR);
         CC = cell(1, numel(ibatch));
         [CC{:}] = deal(zeros(Nchan,  Nchan, 'single')); % we'll estimate the covariance from data batches, then add to this variable
@@ -43,17 +52,18 @@ if getOr(ops, 'useMemMapping',0)
         end
         
         % Memory map the raw data file to m.Data.x of size [nChan, nSamples)
-        mmfRaw = dir(ops.fbinary);
-        nsamp = mmfRaw.bytes/2/ops.NchanTOT;
-        mmfRaw = memmapfile(ops.fbinary, 'Format',{'int16', [ops.NchanTOT, nsamp], 'x'}); % ignore tstart here b/c we'll account for it on each mapped read (using .twind)
-        %parmmf = parallel.pool.Constant(mmf);
+        %   mmfRaw = dir(ops.fbinary);
+        bytesRaw    = get_file_size(ops.fbinary); % size in bytes of raw
+        nsampRaw       = floor(bytesRaw/NchanTOT/2);
+        mmfRaw      = memmapfile(ops.fbinary, 'Format',{'int16', [NchanTOT, nsampRaw], 'x'}); % ignore tstart here b/c we'll account for it on each mapped read (using .twind)
+        %parmmf     = parallel.pool.Constant(mmf);
         tic
         parfor i = 1:length(ibatch)
         % for i = 1:length(ibatch)
             ii = ibatch(i);
             %offset = max(0, twind + 2*NchanTOT*((NT - ntbuff) * (ii-1) - 2*ntbuff));
             % index batch timepoints to read:  [ntbuff + NT + ntbuff]
-            twindow = [max(1, twind + NT*(ii-1) - ntbuff): min(tend, twind + NT*(ii) + ntbuff)]; 
+            twindow = [max(1, tstart + NT*(ii-1) - ntbuff): min(nsampRaw, tstart + NT*(ii) + ntbuff)]; 
 
             % read from memory mapped file
             buff = mmfRaw.Data.x(:,twindow);
@@ -96,7 +106,7 @@ if getOr(ops, 'useMemMapping',0)
             buff = buff(ntbuff+1:end-ntbuff,:);   % remove timepoints used as buffers
             
             CC{i}        = (buff' * buff)/NT; % sample covariance
-            %pb.check(i); % progress bar updates not meaningful when running on parallel pool
+            %pb.check(i); % progress bar updates not meaningful when run on parallel pool
         end
         toc
         % scale & combine parallel outputs
@@ -156,3 +166,5 @@ end
 Wrot    = ops.scaleproc * Wrot; % scale this from unit variance to int 16 range. The default value of 200 should be fine in most (all?) situations.
 
 fprintf('Channel-whitening matrix computed. \n');
+
+end %main function

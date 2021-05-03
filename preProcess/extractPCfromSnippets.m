@@ -1,29 +1,43 @@
-function wPCA = extractPCfromSnippets(rez, nPCs)
+function wPCA = extractPCfromSnippets(rez, nPCs, nskip)
 % extracts principal components for 1D snippets of spikes from all channels
 % loads a subset of batches to find these snippets
+% 
+% [ks25] updates:
+% - useMemMapping by default
+% - corrected buffer usage in isolated_peaks_buffered.m  (prev. "isolated_peaks_new.m")
+% - added override [nskip] input to subsample batches (sometimes more sparse/fine is desired)
+% 
+% ---
+% 2021-xx-xx  TBC  Evolved from original Kilosort
+% 2021-04-28  TBC  Cleaned & commented; useMemMapping = 1 by default
+% 
 
 ops = rez.ops;
-nskip = getOr(ops, 'nskip', 25)
-Nbatch      = rez.temp.Nbatch;
-NT  	= ops.NT;
-batchstart = 0:NT:NT*Nbatch;
+useMemMapping = getOr(ops, 'useMemMapping',1);
+
+if nargin<3 || isempty(nskip)
+    % skip every this many batches
+    nskip = getOr(ops, 'nskip', 25);
+end
+
+Nbatch      = ops.Nbatch;
 
 % extract the PCA projections
 CC = zeros(ops.nt0); % initialize the covariance of single-channel spike waveforms
-fid = fopen(ops.fproc, 'r'); % open the preprocessed data file
+
+if useMemMapping
+    % use handle to memmapped file object
+    fid = ops.fprocmmf;
+else
+    fid = fopen(ops.fproc, 'r'); % open the preprocessed data file
+end
 
 for ibatch = 1:nskip:Nbatch % from every nth batch
-    offset = 2 * ops.Nchan*batchstart(ibatch);
-    fseek(fid, offset, 'bof');
-    dat = fread(fid, [NT ops.Nchan], '*int16');
-
-    % move data to GPU and scale it back to unit variance
-    dataRAW = gpuArray(dat);
-    dataRAW = single(dataRAW);
-    dataRAW = dataRAW / ops.scaleproc;
+    
+    dataRAW = get_batch(ops, ibatch, fid);
 
     % find isolated spikes from each batch
-    [row, col, mu] = isolated_peaks_new(dataRAW, ops);
+    [row, col] = isolated_peaks_buffered(dataRAW, ops);
 
     % for each peak, get the voltage snippet from that channel
     clips = get_SpikeSample(dataRAW, row, col, ops, 0);
@@ -31,11 +45,21 @@ for ibatch = 1:nskip:Nbatch % from every nth batch
     c = sq(clips(:, :));
     CC = CC + gather(c * c')/1e3; % scale covariance down by 1,000 to maintain a good dynamic range
 end
-fclose(fid);
 
-[U Sv V] = svdecon(CC); % the singular vectors of the covariance matrix are the PCs of the waveforms
+if ~useMemMapping
+    fclose(fid); % clean up
+end
+
+[U] = svdecon(CC); % the singular vectors of the covariance matrix are the PCs of the waveforms
 
 wPCA = U(:, 1:nPCs); % take as many as needed
 
-wPCA(:,1) = - wPCA(:,1) * sign(wPCA(21,1)); % adjust the arbitrary sign of the first PC so its negativity is downward
+% adjust the arbitrary sign of the first PC so its negativity is downward
+% - this is strange...why manipulate sign of PC1, but not the others? --TBC
+if sign(wPCA(ops.nt0min+1,1))>0
+    keyboard; % pause if unexpected polarity
+    % ...turns out, this never seems to trigger. --TBC 2021
+    % If it does, consider applying more complete sign change (e.g. /clustering/template_learning.m)
+end
+wPCA(:,1) = - wPCA(:,1) * sign(wPCA(ops.nt0min+1,1));
 

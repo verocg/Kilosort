@@ -7,6 +7,22 @@ function rez = preprocessDataSub(ops)
 % 3) bandpass filtering;
 % 4) channel whitening;
 % 5) scaling to int16 values
+% 
+% [ks25] updates:
+% - adds git tracking with complete status, revisions, & changes to kilosort repo
+% - uses memory mapped file reads by default (much faster)
+% - updated to "_faster" version of get_whitening_matrix (memmapped reads AND parallelized loading...mmmuch faster)
+% - creates handle to memmapped preprocessed data file in:  rez.ops.fprocmmf
+% - disabled [linear] weighted smoothing of batches
+%   - seems unnecessary & potentially problematic
+%   - esp in cases where batch buffer [.ntbuff] is significantly longer than waveform length [.nt0]
+% - removed creation of rez.temp (unclear why this existed in first place)
+%   - required replacing instances of [rez.temp] to normal [rez] struct throughout codebase
+% 
+% ---
+% 202x-xx-xx  TBC  Evolved from original Kilosort
+% 2021-04-28  TBC  Cleaned & commented
+% 
 
 % track git repo(s) with new utility (see <kilosortBasePath>/utils/gitStatus.m)
 if getOr(ops, 'useGit', 1)
@@ -31,7 +47,7 @@ Nbatch      = ceil(ops.sampsToRead /NT); % number of data batches
 ops.Nbatch = Nbatch;
 
 [chanMap, xc, yc, kcoords, NchanTOTdefault] = loadChanMap(ops.chanMap); % function to load channel map file
-ops.NchanTOT = getOr(ops, 'NchanTOT', NchanTOTdefault); % if NchanTOT was left empty, then overwrite with the default
+ops.NchanTOT = getOr(ops, 'NchanTOT', NchanTOTdefault); % if .NchanTOT was left empty, then overwrite with n channels in file
 
 ops.igood = true(size(chanMap));
 
@@ -44,31 +60,36 @@ rez.xc = xc; % for historical reasons, make all these copies of the channel coor
 rez.yc = yc;
 rez.xcoords = xc;
 rez.ycoords = yc;
-% rez.connected   = connected;
 rez.ops.chanMap = chanMap;
 rez.ops.kcoords = kcoords;
 
-
-NTbuff      = NT + 3*ops.ntbuff; % we need buffers on both sides for filtering
+NTbuff      = NT + 2*ops.ntbuff;
+%  NOTE: formerly "+ 3*ops.ntbuff" when linearly weighting current batch with previously processed copy of itself
 
 rez.ops.Nbatch = Nbatch;
 rez.ops.NTbuff = NTbuff;
 rez.ops.chanMap = chanMap;
 
+doCAR = getOr(ops, 'CAR', 1); % demean raw dat within channel with common *median* referencing
 
-fprintf('Time %3.0fs. Computing whitening matrix.. \n', toc);
+
+% set up the parameters of the filter % just one instance of filters
+if isfield(ops,'fslow')&&ops.fslow<ops.fs/2
+    [b1, a1] = butter(3, [ops.fshigh/ops.fs,ops.fslow/ops.fs]*2, 'bandpass'); % butterworth filter with only 3 nodes (otherwise it's unstable for float32)
+else
+    [b1, a1] = butter(3, ops.fshigh/ops.fs*2, 'high'); % the default is to only do high-pass filtering at 150Hz
+end
+
+cmdLog('Computing whitening matrix...', toc);
+% fprintf('Time %3.0fs. Computing whitening matrix.. \n', toc);
 
 % this requires removing bad channels first
 Wrot = get_whitening_matrix_faster(rez); % outputs a rotation matrix (Nchan by Nchan) which whitens the zero-timelag covariance of the data
 % Wrot = gpuArray.eye(size(Wrot,1), 'single');
 % Wrot = diag(Wrot);
 
-fprintf('Time %3.0fs. Loading raw data and applying filters... \n', toc);
-
-% % %         % Memory map the raw data file to m.Data.x of size [nChan, nSamples)
-% % %         mmfRaw = dir(ops.fbinary);
-% % %         nsamp = mmfRaw.bytes/2/ops.NchanTOT;
-% % %         mmfRaw = memmapfile(ops.fbinary, 'Format',{'int16', [ops.NchanTOT, nsamp], 'x'}); % ignore tstart here b/c we'll account for it on each mapped read (using .twind)
+cmdLog('Loading raw data and applying filters...', toc);
+% fprintf('Time %3.0fs. Loading raw data and applying filters... \n', toc);
 
 fid         = fopen(ops.fbinary, 'r'); % open for reading raw data
 if fid<3
@@ -80,14 +101,8 @@ if fidW<3
     error('Could not open %s for writing.',ops.fproc);    
 end
 
-        % slice ops for parallel
-        ntbuff = ops.ntbuff; % NOTE: this is just the buffer length, not ".NTbuff" (which == the actual batch + buffer length)
-        NT = ops.NT;
-        bufferedNT = NT + 2*ntbuff;
-        tend = ops.tend;
-        twind = ops.twind;
-
 % weights to combine batches at the edge
+% - WAIT, WHAAAAAT????
 w_edge = linspace(0, 1, ops.ntbuff)';
 ntb = ops.ntbuff;
 datr_prev = gpuArray.zeros(ntb, ops.Nchan, 'single');
@@ -97,61 +112,120 @@ allBatches = 1:Nbatch;
 pb = progBar(allBatches, 20);
 
 for ibatch = allBatches
-    % we'll create a binary file of batches of NT samples, which overlap consecutively on ops.ntbuff samples
-    % in addition to that, we'll read another ops.ntbuff samples from before and after, to have as buffers for filtering
-    offset = max(0, ops.twind + 2*NchanTOT*(NT * (ibatch-1) - ntb)); % number of samples to start reading at.
+    % we'll create a preprocessed binary file by reading from the raw file (NOT memory mapped) batches of NT samples,
+    % with each batch padded by ops.ntbuff samples from before & after, to have as buffers for filtering
+    offset = max(0, ops.twind + 2*NchanTOT*(NT * (ibatch-1) - ntb)); % number of BYTES to offset start of standard read operation
     fseek(fid, offset, 'bof'); % fseek to batch start in raw file
     buff = fread(fid, [NchanTOT NTbuff], '*int16'); % read and reshape. Assumes int16 data (which should perhaps change to an option)
     
-% % %         % Memory mapped read
-% % %         twindow = [max(1, twind + NT*(ibatch-1) - ntb): min(tend, twind + NT*(ibatch) + ntb)];
-% % %         % read from memory mapped file
-% % %         buff = mmfRaw.Data.x(:,twindow);
-
-    
     if isempty(buff)
         break; % this shouldn't really happen, unless we counted data batches wrong
+    else
+        nsampcurr = size(buff,2); % how many time samples the current batch has
     end
-    nsampcurr = size(buff,2); % how many time samples the current batch has
+    
+    % % ---------------------------------------------------------------------------------------------------------------
+    % % --- step inside gpufilter.m operations ---%
+    % - unpacked this utility function b/c unhappy with buffer padding before demeaning 
+    
+    % subsample only good channels & transpose for filtering
+    datr = single(buff(chanMap,:))';    % buff dims now: [samples, channel]
+
+    % --- Demean before padding ---
+    % subtract within-channel means from each channel
+    datr = datr - mean(datr, 1); % subtract mean of each channel
+    
+    % CAR, common average referencing by median
+    if doCAR
+        datr = datr - median(datr, 2); % subtract median across channels
+    end
+    
+    % Now can pad first & last batches with zeros
     if nsampcurr<NTbuff
-        buff(:, nsampcurr+1:NTbuff) = repmat(buff(:,nsampcurr), 1, NTbuff-nsampcurr); % pad with zeros, if this is the last batch
+        if ibatch~=1
+            % append zeros if end batch
+            datr = [datr; zeros(NTbuff-nsampcurr, size(datr,2))];
+        else
+            % prepend zeros if first batch
+            datr = [zeros(NTbuff-nsampcurr, size(datr,2)); datr];
+        end
+        % Kilosort [upstream] switched to padding with first/last sample
+        % - not sure this is actually better if we're demeaning first (...it could DEF skew if not)
+        % buff(:, nsampcurr+1:NTbuff) = repmat(buff(:,nsampcurr), 1, NTbuff-nsampcurr); % pad with zeros, if this is the last batch
+    end
+
+    % apply high/low pass filtering
+    % next four lines should be equivalent to filtfilt (which cannot be used because it requires float64)
+    datr = filter(b1, a1, datr); % causal forward filter
+    datr = flipud(datr); % reverse time
+    datr = filter(b1, a1, datr); % causal forward filter again
+    datr = flipud(datr); % reverse time back
+
+    %datr    = gpufilter(buff, ops, chanMap); % apply filters and median subtraction
+
+    % % --- end of gpufilter.m operations ---%
+    % % ---------------------------------------------------------------------------------------------------------------
+    
+    if 0
+        % % % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! % % %
+        % Curious approach to soften potential abrupt steps between batches (??...due to demeaning and/or filtering?)
+        % - ...not really keen on manipulating the source data like this --TBC
+        datr(ntb + [1:ntb], :) = w_edge .* datr(ntb+[1:ntb], :)  +  (1-w_edge) .* datr_prev;
+        
+        datr_prev = datr(ntb +NT + [1:ops.ntbuff], :); % preserve trailing ntbuff samples to use for blending next batch
+        % b/c NTbatch was set to NT+3*ntbuff, this [datr_prev] section
+        % is actually a copy of the first few samples OF THE NEXT BATCH!
+        % - so the w_edge transitioning is actually blending data with copy of itself that was demeaned/filtered with
+        %   the preceeding batch
+        % % % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! % % %
     end
     
-% % %         if twindow(1)==1
-% % %             bpad = repmat(buff(:,1), 1, ntb);
-% % %             buff = cat(2, bpad, buff(:, 1:NTbuff-ntb)); % The very first batch has no pre-buffer, and has to be treated separately
-% % %         end
-    
-    if offset==0
-        bpad = repmat(buff(:,1), 1, ntb);
-        buff = cat(2, bpad, buff(:, 1:NTbuff-ntb)); % The very first batch has no pre-buffer, and has to be treated separately
-    end
-    
-    datr    = gpufilter(buff, ops, chanMap); % apply filters and median subtraction
-    
-%     datr(ntb + [1:ntb], :) = datr_prev;
-    datr(ntb + [1:ntb], :) = w_edge .* datr(ntb + [1:ntb], :) +...
-        (1 - w_edge) .* datr_prev;
-   
-    datr_prev = datr(ntb +NT + [1:ops.ntbuff], :);
     datr    = datr(ntb + (1:NT),:); % remove timepoints used as buffers
    
-    datr    = datr * Wrot; % whiten the data and scale by 200 for int16 range
+    datr    = datr * Wrot; % whiten the data and scale by [ops.scaleproc] for int16 range
 
-    datcpu  = gather(int16(datr')); % convert to int16, and gather on the CPU side
-    count = fwrite(fidW, datcpu, 'int16'); % write this batch to binary file
+    % datcpu  = gather(int16(datr')); % convert to int16, and gather on the CPU side
+    % doesn't actually get sent to gpu right now (TBD: test if faster)
+    count = fwrite(fidW, int16(datr'), 'int16'); % write this batch to binary file
     
     pb.check(ibatch) % update progress bar in command window
     
-    if count~=numel(datcpu)
-        error('Error writing batch %g to %s. Check available disk space.',ibatch,ops.fproc);
+    if count~=numel(datr)
+        error('Error writing batch %g to %s. Check available disk space.', ibatch, ops.fproc);
     end
 end
-fclose(fidW); % close the files
+
+% close the files
+fclose(fidW); 
 fclose(fid);
+
+if getOr(ops, 'useMemMapping',1)
+    % memory map [ops.fproc] file
+    % - don't use Offset pv-pair, precludes using samples before tstart as buffer
+    % - BUT challenge of reading data from fproc with tstart>0 remains
+    %   - unless we preprocess ALL of raw file, including buffers in preprocessed data would create risky
+    %     ambiguity between raw & processed time...
+    %   - committing this first, then attempt 'least bad' alternative to preprocess from t0 to tend+ntbuff, regardless of tstart
+    filename    = ops.fproc;
+    datatype    = 'int16';
+    chInFile    = ops.Nchan;
+    bytes       = get_file_size(filename); % size in bytes of [new] preprocessed data file
+    nSamp       = floor(bytes/chInFile/2);
+    % check that file size is consistent with expected contents
+    % NOTE: this will be slightly larger than original file (ops.sampsToRead)
+    %       b/c rounded up to integer number of batches
+    if nSamp ~= (ops.Nbatch*NT)
+        keyboard
+    end
+    % memory map file
+    rez.ops.fprocmmf         = memmapfile(filename, 'Format',{datatype, [chInFile nSamp], 'chXsamp'});
+    fprintf('\tMemMapped preprocessed dat file:  %s\n\tas:  rez.ops.fprocmmf.Data.chXsamp\n', ops.fproc);
+end
 
 rez.Wrot    = gather(Wrot); % gather the whitening matrix as a CPU variable
 
-fprintf('Time %3.0fs. Finished preprocessing %d batches. \n', toc, Nbatch);
+cmdLog(sprintf('Finished preprocessing %d batches.', Nbatch), toc);
 
-rez.temp.Nbatch = Nbatch;
+% rez.temp.Nbatch = Nbatch;  %?!?!!! why create rez.temp here?  Excised here & in subsequent processing stages
+
+end %main function
