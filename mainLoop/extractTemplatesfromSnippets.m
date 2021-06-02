@@ -7,7 +7,7 @@ function [wTEMP, wPCA] = extractTemplatesfromSnippets(rez, nPCs, nskip)
 % - useMemMapping by default
 % - corrected buffer usage in isolated_peaks_buffered.m  (prev. "isolated_peaks_new.m")
 % - don't stop reading spike samples at arb. count, continue through all batches
-% - added override [nskip] input to subsample batches (sometimes more sparse is ok for speed)
+% - added override [nskip] input to subsample batches (sometimes more sparse/fine is desired)
 % 
 % ---
 % 2021-xx-xx  TBC  Evolved from original Kilosort
@@ -73,7 +73,7 @@ wTEMP = wTEMP ./ sum(wTEMP.^2,1).^.5; % normalize them
 if debugPlot
     % plot evolution of templates extracted from data
     figure(201);
-    set(gcf, 'windowstyle','normal', 'position',[100,400, 2500, 200]);
+    set(gcf, 'name','Kilosort [TEMP]lates', 'windowstyle','normal', 'position',[100,400, 2500, 200]);
     subplot(1,11,1), imagesc(wTEMP)
 end
 
@@ -99,12 +99,13 @@ wPCA = gpuArray(single(U(:, 1:nPCs))); % take as many as needed
 % adjust the arbitrary sign of the first PC so its negativity is downward
 % - this is strange...why manipulate sign of PC1, but not the others? --TBC
 if sign(wPCA(ops.nt0min+1,1))>0
-    keyboard; % pause if unexpected polarity
+    fprintf(2, '~!~\tNotice:  sign flip of PC components detected & inverted during extractTemplatesfromSnippets.m operation...\n')
+    %keyboard; % pause if unexpected polarity
     % ...turns out, this never seems to trigger. --TBC 2021
     % If it does, consider applying more complete sign change (e.g. /clustering/template_learning.m)
 end
-wPCA(:,1) = - wPCA(:,1) * sign(wPCA(ops.nt0min+1,1));
+% wPCA(:,1) = - wPCA(:,1) * sign(wPCA(ops.nt0min+1,1));
+wsign = -sign(wPCA(ops.nt0min+1, 1));
+wPCA = wPCA .* wsign;
 
 end %main function
-
-

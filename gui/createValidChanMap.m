@@ -19,6 +19,8 @@ if isfield(q, 'chanMap') && ...
     cm.ycoords = q.ycoords(:);
     cm.chanMap0ind = q.chanMap(:)-1;   
     
+    % [.connected] logical flag for connected channels
+    % - utility unclear...if not connected, why present in chanMap??
     if isfield(q, 'connected') 
         if numel(q.connected)==numel(cm.chanMap) 
             cm.connected = q.connected(:);
@@ -30,6 +32,15 @@ if isfield(q, 'chanMap') && ...
         cm.connected = true(size(cm.chanMap));
     end
     
+    % [.fs] continuous data sampling rate
+    if isfield(q, 'fs') 
+        cm.fs = q.fs;
+    else
+        cm.fs = [];
+    end
+    
+    % [.kcoords] indexed grouping of separate devices/shanks w/in same recording
+    % - not used since Kilosort 2.0
     cm.kcoords = ones(size(cm.chanMap));
     if isfield(q, 'kcoords') 
         if numel(q.kcoords)==numel(cm.chanMap)
@@ -63,6 +74,13 @@ if isfield(q, 'chanMap') && ...
     
     if isfield(q, 'siteSize')
         cm.siteSize = siteSize;
+    end
+    
+    % Don't discard additional chanMap fields
+    % - allow user to include additional info about their recording/hardware/etc
+    fn = fieldnames(q);
+    for f = find(~ismember(fn, fieldnames(cm)))'
+        cm.(fn{f}) = q.(fn{f});
     end
     
 else
