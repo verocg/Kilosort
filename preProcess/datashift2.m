@@ -201,6 +201,21 @@ if isfield(rez, 'F0')
     imin = imin - d0;
 end
 
+% convert shift to um 
+dshift = imin * dd;
+
+if rez.ops.integerShifts
+    % keep record of full-res dshifts for good measure
+    rez.dshift0 = dshift;
+    % round shifts to integers of channel spacing
+    dmin = median(diff(unique(rez.yc)));
+    dshift = round(dshift./dmin).*dmin;
+end
+
+% keep track of dshift 
+rez.dshift = dshift;
+
+
 %%
 if getOr(ops, 'fig', 1)  
     figure;
@@ -208,11 +223,18 @@ if getOr(ops, 'fig', 1)
     xl = [-.5,Nbatches+0.5]*batchSec + ops.trange(1); % xlim in seconds
     
     % plot the shift trace in um
-    plot(imin * dd)
+    plot(rez.dshift,'-r')
+    llabl = {'rez.dshift'};
     box off
+    if isfield(rez,'dshift0')
+        plot(rez.dshift0,'color',[.7 .7 1]);
+        llabl = [llabl, 'rez.dshift0 (full-res)'];
+        hold on
+    end
     xlabel('batch number')
     ylabel('drift (um)')
     title('Estimated drift traces')
+    legend(llabl)
     drawnow
     
     % raster plot of all spikes at their original depths
@@ -253,8 +275,6 @@ if getOr(ops, 'fig', 1)
 
 end
 %%
-% convert to um 
-dshift = imin * dd;
 
 % NO@!!@  Please stop messing with time for drift correction!!!
 % % this is not really used any more, should get taken out eventually
@@ -264,11 +284,6 @@ dshift = imin * dd;
 if do_correction>=1
     cmdLog(sprintf('Applying drift correction to\t%s', ops.fproc));
     if rez.ops.integerShifts
-        % keep record of full-res dshifts for good measure
-        rez.dshift0 = dshift;
-        % round shifts to integers of channel spacing
-        dmin = median(diff(unique(rez.yc)));
-        dshift = round(dshift./dmin).*dmin;
         % minimize sigma for the Gaussian process smoothing
         sig = 1; % no smoothing across channels (else produces unwanted a gain reduction on probes w/site spacing >= 50um)
     else
@@ -295,8 +310,7 @@ else
     end
     cmdLog(sprintf('%s drift correction computed, but not applied.',mfilename), toc);
 end
-% keep track of dshift 
-rez.dshift = dshift;
+
 % keep track of original spikes
 rez.st0 = st3;
 

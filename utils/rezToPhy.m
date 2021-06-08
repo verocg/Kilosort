@@ -218,12 +218,9 @@ if ~isempty(savePath)
     if ~exist(fullfile(savePath,'params.py'),'file')
         fid = fopen(fullfile(savePath,'params.py'), 'w');
 
-%        [~, fname, ext] = fileparts(rez.ops.fbinary);
-%         fprintf(fid,['dat_path = ''',fname ext '''\n']);
-%         fprintf(fid,'n_channels_dat = %i\n',rez.ops.NchanTOT);
-        [root, fname, ext] = fileparts(rez.ops.fproc);
-%         fprintf(fid,['dat_path = ''',fname ext '''\n']);
-        fprintf(fid,['dat_path = ''', strrep(rez.ops.fproc, '\', '/') '''\n']);
+        % use relative path name for preprocessed data file in params.py
+        [~, fname, ext] = fileparts(rez.ops.fproc);
+        fprintf(fid, 'dat_path = ''%s''\n', fullfile('.',[fname,ext]));
         
         fprintf(fid,'n_channels_dat = %i\n',rez.ops.Nchan);
         

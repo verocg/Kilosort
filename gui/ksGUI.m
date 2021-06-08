@@ -428,6 +428,9 @@ classdef ksGUI < handle
             
             set(obj.H.dataAx, 'ButtonDownFcn', @(f,k)obj.dataClickCB(f, k));
             set(obj.H.dataAx, 'TickLength',[.005, .005])
+            title(obj.H.dataAx,'');
+            % initialize data trace handles  [raw, filtered, predicted, residual]
+            [obj.H.residTr,  obj.H.predTr, obj.H.ppTr, obj.H.dataTr] = deal([]);
             hold(obj.H.probeAx, 'on');
             
             set(obj.H.fig, 'WindowScrollWheelFcn', @(src,evt)obj.scrollCB(src,evt))
@@ -786,7 +789,8 @@ classdef ksGUI < handle
             obj.ops.fproc = fullfile(obj.ops.saveDir, sprintf('proDat_%s.dat',obj.ops.fname)); %'temp_wh.dat');
             
             % build channel map that includes only the connected channels
-            chanMap = struct();
+            % % Stop overwriting the chanMap struct!!   chanMap = struct();
+            chanMap = obj.P.chanMap;
             conn = obj.P.chanMap.connected;
             chanMap.chanMap = obj.P.chanMap.chanMap(conn); 
             chanMap.xcoords = obj.P.chanMap.xcoords(conn); 
@@ -794,19 +798,22 @@ classdef ksGUI < handle
             if isfield(obj.P.chanMap, 'kcoords')
                 chanMap.kcoords = obj.P.chanMap.kcoords(conn);
             end
+            % Stop overwriting the chanMap struct!!
             obj.ops.chanMap = chanMap;
             
             % sanitize options set in the gui
-            obj.ops.Nfilt = numel(obj.ops.chanMap.chanMap) * 4;
+            % !No! don't silently mess with params
+            %   obj.ops.Nfilt = numel(obj.ops.chanMap.chanMap) * 4;
             
-            %obj.ops.Nfilt = str2double(obj.H.settings.setNfiltEdt.String);
-            if isempty(obj.ops.Nfilt)||isnan(obj.ops.Nfilt)
-                obj.ops.Nfilt = numel(obj.ops.chanMap.chanMap)*2.5;
+            if ~isfield(obj.ops,'Nfilt') || isempty(obj.ops.Nfilt) || isnan(obj.ops.Nfilt)
+                obj.ops.Nfilt = numel(obj.ops.chanMap.chanMap)*4;
+            elseif obj.ops.Nfilt > numel(obj.ops.chanMap.chanMap)*4
+                obj.log('~!~ Warning:  max templates parameter [ops.Nfilt] exceeds 4*nChannels...this could be problematic/slow');
             end
+            
             if mod(obj.ops.Nfilt,32)~=0
                 obj.ops.Nfilt = ceil(obj.ops.Nfilt/32)*32;
             end
-            %obj.H.settings.setNfiltEdt.String = num2str(obj.ops.Nfilt);
             
             obj.ops.NchanTOT = str2double(obj.H.settings.setnChanEdt.String);
             
@@ -1070,9 +1077,12 @@ classdef ksGUI < handle
                 end
             end
 
-            % save final results as rez
+            % save final results as rez.mat
             fname = fullfile(obj.ops.saveDir, 'rez.mat');
             save(fname, 'rez', '-v7.3');
+            % save .mat copy of chanmap
+            chanMap = obj.ops.chanMap;
+            save(fullfile(obj.ops.saveDir,'chanMap.mat'), 'chanMap');
             toc
 
             rezToPhy(obj.rez, obj.ops.saveDir);
@@ -1167,18 +1177,20 @@ classdef ksGUI < handle
                     datP(~isnan(chListW),:) = pd(chListW(~isnan(chListW)),:);
                     datR = datW-datP;
                     
-                    if ~obj.P.colormapMode % traces mode
-                        
+                    
+                    % ------ Plot Data -------
+                    if ~obj.P.colormapMode
+                        %% Data Axis: Colormap Mode
+                        % data axis title string
                         ttl = '';
-                        
-                        
                         
                         if isfield(obj.H, 'dataIm') && ~isempty(obj.H.dataIm)
                             set(obj.H.dataIm, 'Visible', 'off');
                         end
                         
-                        if obj.P.showRaw
-                            
+                        % Raw data traces
+                        if obj.P.showRaw    % obj.H.dataTr
+                            % data axis title string                            
                             ttl = [ttl '\color[rgb]{0 0 0}raw '];
                             
                             if ~isfield(obj.H, 'dataTr') || numel(obj.H.dataTr)~=numel(chList)
@@ -1199,7 +1211,7 @@ classdef ksGUI < handle
                             conn = obj.P.chanMap.connected(chList);
                             for q = 1:size(dat,1)
                                 set(obj.H.dataTr(q), 'XData', (samps(1):samps(2))/Fs, ...
-                                    'YData', q+double(dat(q,:)).*obj.P.vScale,... .*obj.P.vScale/15,...
+                                    'YData', q+double(dat(q,:)).*obj.P.vScale,...
                                     'Visible', 'on');
                                 if conn(q); set(obj.H.dataTr(q), 'Color', 'k');
                                 else; set(obj.H.dataTr(q), 'Color', 0.8*[1 1 1]); end
@@ -1209,10 +1221,11 @@ classdef ksGUI < handle
                                 set(obj.H.dataTr(q), 'Visible', 'off');
                             end
                         end
-                        % add filtered, whitened data
                         
-                        if obj.P.showWhitened
-                            
+                        
+                        % Filtered data traces
+                        if obj.P.showWhitened   % obj.H.ppTr
+                            % data axis title string
                             ttl = [ttl '\color[rgb]{0 0.6 0}filtered '];
                             
                             if ~isfield(obj.H, 'ppTr') || numel(obj.H.ppTr)~=numel(chList)
@@ -1233,7 +1246,7 @@ classdef ksGUI < handle
                             for q = 1:numel(chListW)  
                                 if ~isnan(chListW(q))
                                     set(obj.H.ppTr(q), 'XData', (samps(1):samps(2))/Fs, ...
-                                        'YData', q+datW(q,:).*obj.P.vScale); % .*obj.P.vScale/15);
+                                        'YData', q+datW(q,:).*obj.P.vScale);
                                 end
                             end
                         elseif isfield(obj.H, 'ppTr')
@@ -1242,13 +1255,17 @@ classdef ksGUI < handle
                             end
                         end
                         
-                        if obj.P.showPrediction
-                            
+                        
+                        % Prediction data traces
+                        if obj.P.showPrediction   % obj.H.predTr
+                            % data axis title string
                             ttl = [ttl '\color[rgb]{0 0 1}prediction '];
                             
                             if ~isfield(obj.H, 'predTr') || numel(obj.H.predTr)~=numel(chList)
                                 % initialize traces
-                                if isfield(obj.H, 'predTr')&&~isempty(obj.H.predTr); delete(obj.H.predTr); end
+                                if isfield(obj.H, 'predTr') && ~isempty(obj.H.predTr)
+                                    delete(obj.H.predTr);
+                                end
                                 obj.H.predTr = [];
                                 hold(obj.H.dataAx, 'on');
                                 for q = 1:numel(chList)
@@ -1263,7 +1280,7 @@ classdef ksGUI < handle
                             for q = 1:numel(chListW)  
                                 if ~isnan(chListW(q))
                                     set(obj.H.predTr(q), 'XData', (samps(1):samps(2))/Fs, ...
-                                        'YData', q+datP(q,:).*obj.P.vScale); %.*obj.P.vScale/15);                            
+                                        'YData', q+datP(q,:).*obj.P.vScale);
                                 end
                             end
                         elseif isfield(obj.H, 'predTr')
@@ -1272,8 +1289,10 @@ classdef ksGUI < handle
                             end
                         end
                         
-                        if obj.P.showResidual
-                            
+                        
+                        % Residual data traces   
+                        if obj.P.showResidual   % obj.H.residTr
+                            % data axis title string
                             ttl = [ttl '\color[rgb]{1 0 0}residual '];
                             
                             if ~isfield(obj.H, 'residTr') || numel(obj.H.residTr)~=numel(chList)
@@ -1293,7 +1312,7 @@ classdef ksGUI < handle
                             for q = 1:numel(chListW)  
                                 if ~isnan(chListW(q))
                                     set(obj.H.residTr(q), 'XData', (samps(1):samps(2))/Fs, ...
-                                        'YData', q+datR(q,:).*obj.P.vScale);  %.*obj.P.vScale/15);                            
+                                        'YData', q+datR(q,:).*obj.P.vScale);
                                 end
                             end
                         elseif isfield(obj.H, 'residTr')
@@ -1301,12 +1320,21 @@ classdef ksGUI < handle
                                 set(obj.H.residTr(q), 'Visible', 'off');
                             end
                         end
-                            
-                        title(obj.H.dataAx, ttl);
+                        
+                        % data axis title string
+                        set(obj.H.dataAx.Title, 'String',ttl);
+                        % arrange data trace layering  [raw, filtered, predicted, residual]
+                        daxTr = [obj.H.residTr,  obj.H.predTr, obj.H.ppTr, obj.H.dataTr];
+                        daxCh = get(obj.H.dataAx, 'Children');
+                        xtraH = daxCh(~ismember(daxCh, daxTr));  % allow any additional/future overlays
+                        set(obj.H.dataAx, 'Children', [xtraH(:); daxTr(:)]);
+
                         yt = arrayfun(@(x)sprintf('%d (%d)', chList(x), obj.P.chanMap.chanMap(chList(x))), 1:numel(chList), 'uni', false);
                         set(obj.H.dataAx, 'YTick', 1:numel(chList), 'YTickLabel', yt);
                         set(obj.H.dataAx, 'YLim', [0 numel(chList)+1], 'YDir', 'normal');
-                    else % colormap mode
+                        
+                    else
+                        %% Data Axis: Colormap Mode
                         %chList = 1:numel(obj.P.chanMap.chanMap);
                         
                         if ~isfield(obj.H, 'dataIm') || isempty(obj.H.dataIm)
@@ -1432,6 +1460,10 @@ classdef ksGUI < handle
                             end
                             cm = createValidChanMap(cm);
                             if ~isempty(cm)
+                                answer = questdlg('Save this channel map for later?');
+                                if strcmp(answer, 'Yes')
+                                    cm = saveNewChanMap(cm, obj);
+                                end
                                 addNewChanMap(obj, cm);
                                 % obj.P.allChanMaps(end+1) = cm;
                                 currProbeList = obj.H.settings.setProbeEdt.String;
@@ -1441,10 +1473,6 @@ classdef ksGUI < handle
                                 % import settings from chanMap to gui
                                 if isfield(cm,'fs') && ~isempty(cm.fs)
                                     obj.H.settings.setFsEdt.String = num2str(cm.fs);  % continuous sampling rate
-                                end
-                                answer = questdlg('Save this channel map for later?');
-                                if strcmp(answer, 'Yes')
-                                    saveNewChanMap(cm, obj);
                                 end
                             else
                                 obj.log('Channel map invalid. Must have chanMap, xcoords, and ycoords of same length');
@@ -1458,6 +1486,10 @@ classdef ksGUI < handle
                             cm = load(fullfile(pathname, filename));
                             cm = createValidChanMap(cm, filename);
                             if ~isempty(cm)
+                                answer = questdlg('Save this channel map for later?');
+                                if strcmp(answer, 'Yes')
+                                    cm = saveNewChanMap(cm, obj);
+                                end
                                 addNewChanMap(obj,cm);
                                 currProbeList = obj.H.settings.setProbeEdt.String;
                                 newProbeList = [{cm.name}; currProbeList];
@@ -1466,10 +1498,6 @@ classdef ksGUI < handle
                                 % import settings from chanMap to gui
                                 if isfield(cm,'fs') && ~isempty(cm.fs)
                                     obj.H.settings.setFsEdt.String = num2str(cm.fs);  % continuous sampling rate
-                                end
-                                answer = questdlg('Save this channel map for later?');
-                                if strcmp(answer, 'Yes')
-                                    saveNewChanMap(cm, obj);
                                 end
                             else
                                 obj.log('Channel map invalid. Must have chanMap, xcoords, and ycoords of same length');
@@ -1523,7 +1551,9 @@ classdef ksGUI < handle
                 if ~isempty(cm)
                     % if it is valid, plot it
                     nSites = numel(cm.chanMap);
-                    ss = 0.8*cm.siteSize;
+                    ux = unique(cm.xcoords); uy = unique(cm.ycoords);
+                    % appropriately size site markers in probe view
+                    ss = 0.8*max( [cm.siteSize, min([diff(uy); diff(ux)])] );
                     
                     if ~isfield(obj.H, 'probeSites') || isempty(obj.H.probeSites) || ...
                             numel(obj.H.probeSites)~=nSites 
@@ -1568,8 +1598,9 @@ classdef ksGUI < handle
 
                     % order by y-coord
                     yc = obj.P.chanMap.ycoords;
-                    theseYC = yc(obj.P.selChans);
-                    [~,ii] = sort(theseYC);
+                    xc = obj.P.chanMap.xcoords;
+                    theseYC = [yc(obj.P.selChans), xc(obj.P.selChans)];
+                    [~,ii] = sortrows(theseYC,[1,2]); % sort by Y, use X as secondary ordering
                     obj.P.selChans = obj.P.selChans(ii);
                     
                     for q = 1:nSites
@@ -1785,14 +1816,18 @@ classdef ksGUI < handle
             if isempty(m)
                 switch k.Key
                     case 'uparrow'
-                        obj.P.nChanToPlot = obj.P.nChanToPlot+1;
-                        if obj.P.nChanToPlot > numel(obj.P.chanMap.chanMap)
-                            obj.P.nChanToPlot = numel(obj.P.chanMap.chanMap);
+                        if ~obj.P.colormapMode
+                            obj.P.nChanToPlot = obj.P.nChanToPlot+1;
+                            if obj.P.nChanToPlot > numel(obj.P.chanMap.chanMap)
+                                obj.P.nChanToPlot = numel(obj.P.chanMap.chanMap);
+                            end
                         end
                     case 'downarrow'
-                        obj.P.nChanToPlot = obj.P.nChanToPlot-1;
-                        if obj.P.nChanToPlot == 0
-                            obj.P.nChanToPlot = 1;
+                        if ~obj.P.colormapMode
+                            obj.P.nChanToPlot = obj.P.nChanToPlot-1;
+                            if obj.P.nChanToPlot == 0
+                                obj.P.nChanToPlot = 1;
+                            end
                         end
                     case 'c'
                         obj.P.colormapMode = ~obj.P.colormapMode;

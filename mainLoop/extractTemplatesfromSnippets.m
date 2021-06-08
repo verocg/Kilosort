@@ -105,7 +105,7 @@ if sign(wPCA(ops.nt0min+1,1))>0
     % If it does, consider applying more complete sign change (e.g. /clustering/template_learning.m)
 end
 % wPCA(:,1) = - wPCA(:,1) * sign(wPCA(ops.nt0min+1,1));
-wsign = -sign(wPCA(ops.nt0min+1, 1));
+wsign = -sign(wPCA(ops.nt0min, 1));
 wPCA = wPCA .* wsign;
 
 end %main function

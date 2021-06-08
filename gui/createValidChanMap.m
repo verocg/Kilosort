@@ -73,7 +73,7 @@ if isfield(q, 'chanMap') && ...
     end
     
     if isfield(q, 'siteSize')
-        cm.siteSize = siteSize;
+        cm.siteSize = q.siteSize;
     end
     
     % Don't discard additional chanMap fields
