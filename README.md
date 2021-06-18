@@ -4,7 +4,7 @@
 
 Detailed documentation of significant & ongoing changesto the codebase and detailed parameter recommendations can be found in **the [dev_TODOs.md](dev_TODOs.md) document**.
 
-[My **[ks25\]** branch](https://github.com/czuba/Kilosort) is based on the Kilosort 2.5 codebase, and attempts to marry some of the more successful features of Kilosort 2.0 (i.e. temporally dynamic waveform templates) with backported features & improvements from the newer Kilosort 2.5 & 3.0 (i.e. a modified version of the 'datashift2' drift correction algorithm).
+[My **\[ks25\]** branch](https://github.com/czuba/Kilosort) is based on the Kilosort 2.5 codebase, and attempts to marry some of the more successful features of Kilosort 2.0 (i.e. temporally dynamic waveform templates) with backported features & improvements from the newer Kilosort 2.5 & 3.0 (i.e. a modified version of the 'datashift2' drift correction algorithm).
 
 While the original Kilosort package (by [Marius Pachitariu, et al.](http://github.com/MouseLand/Kilosort)) is an amazing resource for fast & accurate spike sorting of high-channel count high-density silicon probes (e.g. [Neuropixels](https://www.biorxiv.org/content/10.1101/2020.10.27.358291v1); ~100s-1,000s ch, ~15-20µm spacing), out-of-the-box results have been less successful with data collected during non-chronic linear array recordings with comparatively broader inter-electrode spacing (e.g. [Plexon U-Probes](https://plexon.com/products/plexon-u-probe/); 24-64 ch, ~50-100µm spacing).GUI updates
 
@@ -57,7 +57,7 @@ Finally, it is worth noting that **[ks25] revisions have been implemented with _
 
 ---
 
-For basic installation, follow instructions in the original README.md document text below:
+For general information & installation instructions, see the original _README.md_ document text below:
 
 ---
 
