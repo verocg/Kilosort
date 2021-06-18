@@ -802,12 +802,14 @@ classdef ksGUI < handle
             obj.ops.chanMap = chanMap;
             
             % sanitize options set in the gui
-            % !No! don't silently mess with params
-            %   obj.ops.Nfilt = numel(obj.ops.chanMap.chanMap) * 4;
+            % - .Nfilt must be updated when user right-clicks any channel to 'disconnnect it',
+            %   making it tricky to cleanly parameterize
+            nFF = getOr(obj.ops, 'nfilt_factor',4);
+            obj.ops.Nfilt = numel(obj.ops.chanMap.chanMap) * nFF;
             
             if ~isfield(obj.ops,'Nfilt') || isempty(obj.ops.Nfilt) || isnan(obj.ops.Nfilt)
-                obj.ops.Nfilt = numel(obj.ops.chanMap.chanMap)*4;
-            elseif obj.ops.Nfilt > numel(obj.ops.chanMap.chanMap)*4
+                obj.ops.Nfilt = numel(obj.ops.chanMap.chanMap)*nFF;
+            elseif obj.ops.Nfilt > numel(obj.ops.chanMap.chanMap)*nFF
                 obj.log('~!~ Warning:  max templates parameter [ops.Nfilt] exceeds 4*nChannels...this could be problematic/slow');
             end
             
@@ -1051,7 +1053,7 @@ classdef ksGUI < handle
             fprintf('\n---\tPruning fields from rez struct before saving as .mat:')
             theseFields = {};
             % .cProj & .cProjPC     remove feature projections from rez (default of original ksGUI.m)
-            % ... these are REALLY BIG (nspikes x 32; easily multiple gigs on their own)
+            % ... these are REALLY BIG (nspikes x 32; easily 100s of MB to multiple GB on their own)
             % ... these get written out as template_features.npy & pc_features.npy during rezToPhy, so they are not lost by discarding them here
             theseFields = [theseFields, 'cProj', 'cProjPC'];
 %             % .WA & .UA     temporally dynamic template shape and channel weighting matrices    (.WA == [nt0, nUnits, nPC, nBatches]; .UA == [nChan, nUnits, nPC, nBatches])
@@ -1600,7 +1602,7 @@ classdef ksGUI < handle
                     yc = obj.P.chanMap.ycoords;
                     xc = obj.P.chanMap.xcoords;
                     theseYC = [yc(obj.P.selChans), xc(obj.P.selChans)];
-                    [~,ii] = sortrows(theseYC,[1,2]); % sort by Y, use X as secondary ordering
+                    [~,ii] = sortrows(theseYC,[1,-2]); % sort by Y, use X as secondary ordering
                     obj.P.selChans = obj.P.selChans(ii);
                     
                     for q = 1:nSites

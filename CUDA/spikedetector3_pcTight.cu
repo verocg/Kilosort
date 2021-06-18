@@ -1,7 +1,7 @@
 /*
- * spikedetector3.cu
+ * spikedetector3_pcTight.cu
  *
- * Hacked version of cuda function for Kilosort ks24 standalone_detector.m spike extraction function
+ * Hacked version of cuda function for Kilosort ks25 standalone_detector.m spike extraction function
  * - in [ks25], not used in actual sorting, but only for spike depth estimates by datashift2.m drift correction
  * - Hacked similar to mexMPnu8_pcTight.cu
  * - tightened up window of 1d convolution more closely to waveform center

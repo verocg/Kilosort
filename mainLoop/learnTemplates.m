@@ -104,6 +104,11 @@ batchPhase = [batchPhase, 2*ones(1, length(iorder)-length(batchPhase))];
 % - hardcoded to batch==1, but should allow for user override if alternate extractOrder is defined
 % - (...or future method of using integer datashift epochs as sort
 iorder = [iorder, min(hardeningBatches,25):-1:1];
+
+% Tested "middle-out" method of extraction...no clear benefit
+% iorder = [iorder, (ops.targBatch+25):-1:ops.targBatch];
+
+
 batchPhase = [batchPhase, 3*ones(1, length(iorder)-length(batchPhase))];
 
 % final count of total batches in learning phase
@@ -388,7 +393,7 @@ for ibatch = 1:niter
         nextBatchPhase = batchPhase( min(ibatch+1,end));
         
         % Drop templates during initial learning(1) & hardening phases(2)
-        if batchPhase(ibatch)<3 && (rem(ibatch, 5)==1 | nextBatchPhase==3)
+        if batchPhase(ibatch)<3 && (rem(ibatch, 5)==1 || nextBatchPhase==3)
             % this drops templates based on spike rates and/or similarities to other templates
             if nextBatchPhase==3
                 % final triage opportunity
@@ -564,6 +569,7 @@ rez.iNeigh   = gather(iList);
 rez = memorizeW(rez, W, dWU, U, mu); % memorize the state of the templates
 rez.ops = ops; % update these (only rez comes out of this script)
 rez.nsp = nsp;
+rez.orderLearned = iorder;
 
 % save('rez_mid.mat', 'rez');
 

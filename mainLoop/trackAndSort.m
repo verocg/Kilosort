@@ -145,6 +145,17 @@ troubleUnits = [];
 for ibatch = 1:niter    
     k = iorder(ibatch); % k is the index of the batch in absolute terms
     
+    % Tested "middle-out" method of extraction...no clear benefit
+    %     if k==rez.orderLearned(end)
+    %         % revert to state at end of learning
+    %         fprintf(2, '\n\t~~!!~~\tReverting to learned state for batch %d(#%d) ~~!!~~\n', ibatch, k);
+    %         W = gpuArray(rezLrn.W);
+    %         U = gpuArray(rezLrn.U);
+    %         mu = gpuArray(rezLrn.mu);
+    %         dWU = rezLrn.dWU;
+    %     end
+        
+        
     % loading a single batch (same as everywhere)
     %     offset = 2 * ops.Nchan*batchstart(k);
     %     fseek(fid, offset, 'bof');
@@ -152,9 +163,9 @@ for ibatch = 1:niter
     %     %dat = dat';
     %     dataRAW = single(gpuArray(dat))/ ops.scaleproc;
     if useMemMapping % && isa(ops.fprocmmf, 'memmapfile')
-        dataRAW = get_batch(ops, ibatch, ops.fprocmmf);
+        dataRAW = get_batch(ops, k, ops.fprocmmf);
     else
-        dataRAW = get_batch(ops, ibatch, fid);
+        dataRAW = get_batch(ops, k, fid);
     end    
     %     dataRAW = get_batch(ops, k, fid);
     
@@ -189,11 +200,11 @@ for ibatch = 1:niter
         % - these get passed to [rez] output struct at end of this function
         % - plot them afterward with:  plotTemplateDynamics( rez, rez.troubleUnits);
         troubleUnits = unique([troubleUnits, ii]);
-        invDetected(ii,ibatch) = true;
+        invDetected(ii,k) = true;
         if ops.fig>1 % debug plotting
             try
                 plot(Hsp, dtest);   hold on
-                text(Hsp, 1,0.3, sprintf('batch  %3d\ninversions:  %s', ibatch, mat2str(ii)), 'fontsize',10);
+                text(Hsp, 1,0.3, sprintf('batch  %3d\ninversions:  %s', k, mat2str(ii)), 'fontsize',10);
                 set(Hsp, 'ylim',[-.1,1.1]);
                 hold off,   drawnow nocallbacks
             catch
@@ -322,7 +333,7 @@ for ibatch = 1:niter
     st3(irange,2) = double(id0+1);  % spike clusters (1-indexing)
     st3(irange,3) = double(x0);     % template amplitudes
     st3(irange,4) = double(vexp);   % residual variance of this spike
-    st3(irange,5) = ibatch;         % batch from which this spike was found
+    st3(irange,5) = k;         % batch from which this spike was found
     
     fW(:, irange) = gather(featW(:,~bs));           % template features for this batch
     fWpc(:, :, irange) = gather(featPC(:,:,~bs));   % PC features
@@ -390,6 +401,14 @@ rez.dWU1 = dWU1 ./ reshape(nsp, [1,1,Nfilt]);
 rez.nsp = nsp;
 
 % Output template state prior to extraction (i.e. as learned, prior to any temporal dynamics during extraction)
+% Ensure all GPU arrays are transferred to CPU side
+rl_fields = fieldnames(rezLrn);
+for i = 1:numel(rl_fields)
+    field_name = rl_fields{i};
+    if(isa(rezLrn.(field_name), 'gpuArray'))
+        rezLrn.(field_name) = gather(rezLrn.(field_name));
+    end
+end
 rez.rezLrn = rezLrn;
 rez.troubleUnits = troubleUnits;
 rez.invDetected = invDetected;

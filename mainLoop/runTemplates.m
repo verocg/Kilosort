@@ -27,6 +27,14 @@ Nbatches = rez.ops.Nbatch;
 
 iorder = 1:Nbatches;
 
+% Tested "middle-out" method of extraction...no clear benefit
+% % start extraction at targBatch, 
+% % proceed in reverse-direction to start of file,
+% % jump back to targBatch (recalling state at end of learning)
+% % then sort in forward direction to end of file
+% iorder = [(rez.ops.targBatch-1):-1:1, rez.ops.targBatch:1:Nbatches];
+rez.orderExtract = iorder;
+
 [rez, st3, fW,fWpc] = trackAndSort(rez, iorder);
 
 % sort all spikes by batch -- to keep similar batches together,

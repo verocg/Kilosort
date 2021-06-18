@@ -227,9 +227,9 @@ if getOr(ops, 'fig', 1)
     llabl = {'rez.dshift'};
     box off
     if isfield(rez,'dshift0')
+        hold on
         plot(rez.dshift0,'color',[.7 .7 1]);
         llabl = [llabl, 'rez.dshift0 (full-res)'];
-        hold on
     end
     xlabel('batch number')
     ylabel('drift (um)')

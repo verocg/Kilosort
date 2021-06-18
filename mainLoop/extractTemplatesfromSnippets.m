@@ -53,7 +53,7 @@ for ibatch = 1:nskip:Nbatch
         dd(:, 2*size(dd,2)) = 0;
     end
 
-    dd(:, k + [1:size(c,2)]) = c;
+    dd(:, k + (1:size(c,2))) = c;
     k = k + size(c,2);
 
 end
@@ -67,7 +67,10 @@ dd = dd(:, 1:k);
 
 % initialize the template clustering with sampling of waveforms **distributed throughout file duration**
 % wTEMP = dd(:, randperm(size(dd,2), nPCs));
-wTEMP = dd(:, round(linspace(1, size(dd,2), nTEMP)));
+% wTEMP = dd(:, round(linspace(1, size(dd,2), nTEMP)));
+sectSize = floor(size(dd,2)/nTEMP);
+ti = randperm(sectSize, nTEMP) + round(linspace(0, size(dd,2)-sectSize, nTEMP));
+wTEMP = dd(:, ti);
 wTEMP = wTEMP ./ sum(wTEMP.^2,1).^.5; % normalize them
 
 if debugPlot
@@ -86,10 +89,18 @@ for i = 1:10
    end
    wTEMP = wTEMP ./ sum(wTEMP.^2,1).^.5; % unit normalize
    
+   if i==10
+       % sort templates by frequency on last iteration
+       tc = histcounts(imax,nTEMP);
+       [~,tord] = sort(tc,'descend');
+       wTEMP = wTEMP(:,tord);
+   end
    if debugPlot
        figure(201); subplot(1,11,i+1); imagesc(wTEMP);
    end
 end
+
+
 
 dd = double(gather(dd));
 [U] = svdecon(dd); % the PCs are just the left singular vectors of the waveforms

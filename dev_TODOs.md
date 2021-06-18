@@ -31,17 +31,25 @@ In additon to reflecting the non-temporary nature of the preprocessed data file,
 
 
 
-## Basic usage
+## Basic [ks25] usage
 
-- Launch standard gui by executing  `>> kilosort` from the command window
+- Launch standard gui by executing  `>> kilosort` from the Matlab command window
 - Select your **data file** & **output directory** for this kilosort session
+  - If you choose your data file _first_, the output directory will automatically populate with the data file directory
+  - ...because I generally house my converted `.dat` files for a given day in separate `./raw` directory & all kilosort output directories from that day in a `./KiloSort` directory, <u>*I prefer to select output directory first, then select my data file*</u>  
 - Select probe layout file appropriate for your device
-  - default variables & trace view should populate in the gui automatically
-- run `ksGUI_updatePars.m` to apply [your] advanced parameter settings to the current gui instance
+  - default variables & trace view should populate in the gui automatically after a probe file has been selected
+  - Note: this selection must be done even if the probe dropdown already shows the probe file you intend to use
+- Run `ksGUI_updatePars.m` to apply [your] advanced parameter settings to the current gui instance
   - ***similar to*** simply clicking on the "Set advanced options" button, this will create a `ks` variable in the base workspace comprising a handle to the kilosort gui object
   - all updates to the `ops` struct w/in `ksGUI_updatePars.m` will be applied to the `ks.ops` struct of the GUI object
   - ***in addition*** this function ensures that changes made to `ks.ops` are applied to the parameter fields of the GUI
-- click on the "Run All" button in the Kilosort GUI interface
+- Click on the **"Preprocess"** button in the Kilosort GUI interface
+  - this will run initial data preprocessing operations & initialize all important variables in the `ks.rez` struct
+  - create a filtered copy of your data in `<saveDir>/proDat_<saveDirName>.dat` (...replacement naming convention for "temp_wh.dat")
+  - compute & plot data shift estimates (...useful diagnostic, even if no drift correction is going to be applied)
+- After reviewing the driftMaps produced during the preprocessing stages, if all looks good,
+  click on the **"Sort & Save"** button to complete the actual sorting & saving stages
 
 
 
@@ -138,7 +146,48 @@ ops.applyCutoff = 0;
 
 
 
-## Recommended parameters for non-chronic linear arrays
+## chanMap creation
+
+Updated handling & creation of recording device channel map file ("chanMap")
+
+- `createChannelMapFile.m` has been updated to a functional form:
+
+  ```matlab
+  % function cm = createChannelMapFile(nChan, ysp, xsp, chPerRow, varargin)
+  %
+  % Functional version of Kilosort channel map creation
+  % - chanMap file will be saved in default kilosort configFiles directory
+  %   as <cm.name>.mat    (...fallback to [pwd], asks to overwrite if file already exists)
+  % - include or specify any additional channel map fields as additional PV pair input:  ...'parameter', value...)
+  % - ks25 updated to retain any additional recording device info the user chooses to include in chanMap file
+  % 
+  % INPUTS:
+  %   nChan   = total number of channels
+  %   ysp     = y spacing [um]
+  %   xsp     = x spacing [um]
+  %   chPerRow    = number of channels per row
+  %
+  %   additional/optional PV pairs:
+  %       'name'      (def = 'example<nChan>ch<fs/1000>k')
+  %       'fs'        (def = 40000)
+  %       'configFxn' (def = '')
+  % 
+  % OUTPUTS:
+  %   cm  = channel map struct
+  ```
+
+- Channel numbering & spacing convention:
+  - channel numbers increase from left-to-right, proximal-to-distal
+  - y-zero at most distal channel
+  - y-coord advances in ysp increments up the probe
+    - such that y-zero coincides with tareing the probe depth
+      at first detectable entry into brain
+    - absolute channel depths are then:  probe depth - y-coord
+  - x-coords are balanced on either side of x-zero
+
+# Non-chronic linear array parameters
+
+## Probe geometry
 
 Probe style/geometry used during **ks25** code development:
 
@@ -175,7 +224,7 @@ Probe style/geometry used during **ks25** code development:
   
   
 
-General processing & thresholds:
+## General processing & thresholds:
 
 ```matlab
 % when Kilosort does CAR, is on batch time blocks, which mitigates risk of steps injected btwn demeaned segments
@@ -206,7 +255,7 @@ ops.Th = [8 4]; %[10 4];  (TBC: [8 4] better for awake nhp, but still clipping)
 
 ```
 
-Batch duration:
+## Batch duration:
 
 ```matlab
 % Define batches in seconds of data, not abstract bit chunks
@@ -226,7 +275,13 @@ ops.nSkipCov    = 1; %batchSkips;  % 1; % compute whitening matrix from every N-
 
 ```
 
-Drift correction: 
+## Drift correction:
+
+**Note:**  While the `datashift` method of drift correction is a great improvement on the batch reordering (temporal) method employed in Kilosort version 2.0, it is still recommended to only use the estimated drift maps as a diagnostic tool.
+
+- If there are moments of the session in which a relatively abrupt shift occurs, use the drift estimates & `ops.integerShifts = 1` to identify the time of abrupt shift, then separately sort those segments of the file & merge the sorted results post-hoc
+  - Admittedly, this is easier said than done. There is a new utility function called **`rezMergeToPhy.m`** that will [attempt to] merge the [rez] structs from two separate Kilosort sessions into one output directory that can be loaded into Phy for manual curation & integration.
+- If drift apparent in the driftMap is more gradual, try allowing template dynamics to absorb variation due to probe shift
 
 ```matlab
 ops.nblocks = 0; % 0==driftMap will be computed & plotted, but not applied
@@ -247,7 +302,7 @@ ops.sig = 20; % [def = 20]
 
 ```
 
-Spike detection:
+## Spike detection:
 
 ```matlab
 %% Stereo-probe specific adjustments (standard geom: 50um within, 100um between stereopairs)
@@ -274,7 +329,7 @@ ops.nTEMP = 12;
 
 ```
 
-Template learning:
+## Template learning:
 
 ```matlab
 % Randomize batch order during learning
@@ -293,9 +348,12 @@ ops.clipMinFit = 0.8; % [def = 0.7] % 0.8 recommended for uprobe spacing
 
 ```
 
-Post-processing:
+## Post-processing:
 
-_(post-processing flags are largely implemented w/in the GUI Spike Sort operations;  ksGUI.m >> runSpikesort(obj)  )_
+- _Post-processing flags are largely implemented w/in the GUI Spike Sort operations;  ksGUI.m >> runSpikesort(obj)_
+- General recommendation is to disable most/all post-processing auto merge & cutoff operations
+  - This allows you to actually see what the outputs of the sorting algorithm are producting, before any clipping or modification
+  - The nature of a temporally evolving spike template means that a single snapshot of a template at the end of sorting may not accurately represent the shape or channel distribution of the template used at the time of spike extraction. Therefore metrics of cluster quality based on this final/singular template shape tend to be misleading & result in inaccurate merging, splitting, or discarding of spike clusters all together
 
 ```matlab
 % Apply detailed ccg analysis function to remove double-counted spike clusters
@@ -315,20 +373,26 @@ ops.applyCutoff = 0;
 
 
 
+---
+
+---
+
+# Detailed explanation of code changes & motivations 
 
 
-# Preprocessing updates
+
+## 	Preprocessing updates
 
 Summary
 
-## Correct & consistent implementation of batch buffers
+### Correct & consistent implementation of batch buffers
 
 Loading of batches standardized using fully updated `get_batch.m`
 - capible of loading either from Memory Mapped ("memmapped") file, or with standard `fread` calls
 - a memmapped object handle to pre-processed data file (`temp_wh.dat`) is stored in `ops.fprocmmf`
   - mmf format must follow that setup in `preprocessDataSub.m`;  .Data subfield convention is `.chXsamp` (awk, but informative)
 
-### Extensive re-write of preprocessed file creation & handling
+#### Extensive re-write of preprocessed file creation & handling
 
 The datashift2.m drift correction approach necessitated a change in Kilosort processing pipeline in which drift correction is applied _directly to the pre-processed `temp_wh.dat` file_
 
@@ -341,7 +405,7 @@ The datashift2.m drift correction approach necessitated a change in Kilosort pro
   - Non-zero `tstart` can be important in cases where excess data epochs outside of the experimental stimulus/behavior are present in the raw acquisition file (e.g. comprising pre-experiment probe movement and/or settling time) 
   - because neural activity during excess epochs can be very distinct from that during the experimental stimulus, including them in the sorted data tends to cause all kinds of problems in the sorted outputs
 
-### Changes to `temp_wh.dat` file content
+#### Changes to `temp_wh.dat` file content
 
 - carefully include ***all timepoints*** from `t=0` to `t=tstart` while maintaining consistent batch start/stop timepoints relative to `ops.tstart` & `ops.tend`. 
 - update batch loading throughout codebase to use  `get_batch.m` calls for correct handling of batch sample offset/range/buffers/etc
@@ -350,7 +414,7 @@ The datashift2.m drift correction approach necessitated a change in Kilosort pro
 
 
 
-## Drift correction [datashift2.m]
+### Drift correction (`datashift2.m`)
 
 Summary
 
@@ -358,11 +422,11 @@ Summary
   - shift estimates output in `rez.dshift` 
 
 - when enabled (`ops.nblocks>=1`), data shifts are **_applied directly to the preprocessed data file_** (`temp_wh.dat`) 
-- 'batch sized' temporal resolution (`ops.NT` samples per batch)
+- drift correction/estimation occurs in 'batch sized' temporal resolution (`ops.NT` samples per batch)
 
 
 
-### Drift correction params
+#### Drift correction params
 
 ##### `ops.nblocks`
 
@@ -388,78 +452,7 @@ Summary
 
 
 
-
-
 Updated target selection & weighting
-
-
-
-# Template learning
-
-Summary
-
-#### Rationale for random order batches during learning
-
-If the goal of template learning is to produce _the complete set of templates_ necessary for spike extraction throughout the file, then fitting a set of templates to a temporally randomized batch order with a generally low[er] minimum spike rate threshold for dropping templates should produce the most robust template set.
-
-
-
-## Multi-phase learning
-
-### Phase 1: Initial learning
-
-- [iorder0] input to learnTemplates.m
-  - length == [niter0]
-- randomize order of batches from 2:end-1 for learning
-  - skip first and last because have ideosyncratic edge artifacts (padded buffer segments), and tend to comprise non-stimulus epochs just before/after experimental stimulus
-- template learning rate [ops.momentum] spans this range as normal;  `exp(-1./linspace(ops.momentum(1), ops.momentum(2), niter0))`
-- template dropping & adding occurs as normal (every 5th batch) during learning phase 1:
-  - templates are dropped (triageTemplates2.m) a during this phase based on standard metrics
-    - min firing rate cutoff [ops.minFR] (needs batch length dependent update)
-    - similarity to other templates  (would like to see this updated too; currently hardcoded cutoffs w/in triageTemplates2.m)
-  - templates are added as detected in residuals
-    - better understanding of this process (w/in `mexGetSpikes2.cu`) would be good
-      - ...newly added templates seem to often include excessively broad and/or predominantly negative spatial (channel) weighting distributions
-
-**NOTE:** length of Phase 2 & 3 dependent on [ops.hardeningBatches] parameter
-
-  - can be manually set, but default 50% of total batch count set w/in learnTemplates.m is recommended
-    (def= `ceil(0.50 * niter0)`)
-
-### Phase 2: Template hardening
-
-- pad initial set of randomized batches with additional randomly ordered batches
-- template dropping occurs as normal, _but_ template adding is disabled
-- provides time for templates that may have been newly added during Phase 1 to undergo template shape evolution, and be dropped if they prove to be inactive (<minFR) or simply merge to become similar to existing template (i.e. standard triage drop crit)
-- template update parameter [pmi] is held at final/highest value throughout this phase
-  - **~!~** perhaps this param should be relative to the 'age' of each template rather than batch iteration #
-    - _**~!~Done~!~**_ template update weighting is now indexed by `filterAge` parameter, which is updated across batches & throughout triage/drops/reordering operations during Learning Phases
-
-### Phase 3: Conditioning for start of extraction
-
-- pad with sequence of batches from `[hardeningBatches]:-1:1`
-- conditions templates by walking them back to first batch prior to advancing to spike extraction phase
-- template dropping & adding are _both_ disabled during this phase
-
-
-
-## New template generation
-
-During 'phase 1'  of template learning (see Multi-phase learning section) new templates are queued based on clustered threshold crossings detected in the residuals of the current batch after spike extraction with the current set of templates (specifically `learnTemplates.m >> mexGetSpikes2.cu`).
-
-- however, original Kilosort implementation does not actually initialize new templates based on the shape of residual spike clusters, rather it just initializes the temporal components with generic waveform PCA components (`rez.wPCA`) & ignores the spatial (channel weighting) components all together
-  - the low-rank representation of the new template residuals (`dWU0` output from `mexGetSpikes2.cu`)  _are incorporated into the existing `dWU` low-rank templates_ 
-  - and no doubt any missing components are computed during subsequent stages of processing on the next batch iteration (probably more efficiently on the gpu by `mexSVDsmall2.cu`)
-  - _BUT_ generic PCA initialization surely skews new templates [somewhat] away from their motivating components, and effectively masks the shape what is driving new template additions (insofar as they're not apparent in the `make_fig.m`  plots)
-
-## Refined template dropping
-
-During 'phase 1 & 2' of template learning, templates are dropped based on:
-
-- minimum firing rate (`ops.minFR`, def = 0.02)
-- _**new:**_   drop any templates with predominantly negative weighting
-  - based on either peak channel, or mean weight across all channels [in template]
-- similarity to other templates
 
 
 
@@ -556,6 +549,77 @@ A second clipping theshold based on template fit quality to _exclude low firing 
 
 
 
+## Template learning
+
+Summary
+
+#### Rationale for random order batches during learning
+
+If the goal of template learning is to produce _the complete set of templates_ necessary for spike extraction throughout the file, then fitting a set of templates to a temporally randomized batch order with a generally low[er] minimum spike rate threshold for dropping templates should produce the most robust template set.
+
+
+
+### Multi-phase learning
+
+#### Phase 1: Initial learning
+
+- [iorder0] input to learnTemplates.m
+  - length == [niter0]
+- randomize order of batches from 2:end-1 for learning
+  - skip first and last because have ideosyncratic edge artifacts (padded buffer segments), and tend to comprise non-stimulus epochs just before/after experimental stimulus
+- template learning rate [ops.momentum] spans this range as normal;  `exp(-1./linspace(ops.momentum(1), ops.momentum(2), niter0))`
+- template dropping & adding occurs as normal (every 5th batch) during learning phase 1:
+  - templates are dropped (triageTemplates2.m) a during this phase based on standard metrics
+    - min firing rate cutoff [ops.minFR] (needs batch length dependent update)
+    - similarity to other templates  (would like to see this updated too; currently hardcoded cutoffs w/in triageTemplates2.m)
+  - templates are added as detected in residuals
+    - better understanding of this process (w/in `mexGetSpikes2.cu`) would be good
+      - ...newly added templates seem to often include excessively broad and/or predominantly negative spatial (channel) weighting distributions
+
+**NOTE:** length of Phase 2 & 3 dependent on [ops.hardeningBatches] parameter
+
+  - can be manually set, but default 50% of total batch count set w/in learnTemplates.m is recommended
+    (def= `ceil(0.50 * niter0)`)
+
+#### Phase 2: Template hardening
+
+- pad initial set of randomized batches with additional randomly ordered batches
+- template dropping occurs as normal, _but_ template adding is disabled
+- provides time for templates that may have been newly added during Phase 1 to undergo template shape evolution, and be dropped if they prove to be inactive (<minFR) or simply merge to become similar to existing template (i.e. standard triage drop crit)
+- template update parameter [pmi] is held at final/highest value throughout this phase
+  - **~!~** perhaps this param should be relative to the 'age' of each template rather than batch iteration #
+    - _**~!~Done~!~**_ template update weighting is now indexed by `filterAge` parameter, which is updated across batches & throughout triage/drops/reordering operations during Learning Phases
+
+#### Phase 3: Conditioning for start of extraction
+
+- pad with sequence of batches from `[hardeningBatches]:-1:1`
+- conditions templates by walking them back to first batch prior to advancing to spike extraction phase
+- template dropping & adding are _both_ disabled during this phase
+
+
+
+### New template generation
+
+During 'phase 1'  of template learning (see Multi-phase learning section) new templates are queued based on clustered threshold crossings detected in the residuals of the current batch after spike extraction with the current set of templates (specifically `learnTemplates.m >> mexGetSpikes2.cu`).
+
+- however, original Kilosort implementation does not actually initialize new templates based on the shape of residual spike clusters, rather it just initializes the temporal components with generic waveform PCA components (`rez.wPCA`) & ignores the spatial (channel weighting) components all together
+  - the low-rank representation of the new template residuals (`dWU0` output from `mexGetSpikes2.cu`)  _are incorporated into the existing `dWU` low-rank templates_ 
+  - and no doubt any missing components are computed during subsequent stages of processing on the next batch iteration (probably more efficiently on the gpu by `mexSVDsmall2.cu`)
+  - _BUT_ generic PCA initialization surely skews new templates [somewhat] away from their motivating components, and effectively masks the shape what is driving new template additions (insofar as they're not apparent in the `make_fig.m`  plots)
+
+### Refined template dropping
+
+During 'phase 1 & 2' of template learning, templates are dropped based on:
+
+- minimum firing rate (`ops.minFR`, def = 0.02)
+- _**new:**_   drop any templates with predominantly negative weighting
+  - based on either peak channel, or mean weight across all channels [in template]
+- similarity to other templates
+
+
+
+
+
 # Spike extraction
 
 Summary
@@ -613,7 +677,13 @@ The same template updating clip parameters (`ops.clipMin` & `ops.clipMinFit`) us
 
 ---
 
+---
+
+
+
 # TODO items
+
+
 
 ## General
 
@@ -699,7 +769,7 @@ Rate parameters need updating to be adaptive to batch duration and/or nbatches
 
 
 
-Now that newly added templates are actually based on the shape of residuals that produced them, worth revisiting template dropping based on similarity to existing templates
+Now that newly added templates are *actually* based on the shape of residuals that produced them, worth revisiting template dropping based on similarity to existing templates
 
 - if two templates evolve into a similar shape (as might happen as they descend into noise floor during probe drift), _but_ capture distinct spiking events/units at other timepoints, we don't want to completely/arbitrarily lose the one with lower amplitude at the time of triage assessment
 
